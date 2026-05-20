@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -81,58 +80,61 @@ def get_mock_gemini_client(api_key: str | None = None) -> MagicMock:
     return mock_client
 
 
-def test_watcher_pipeline() -> None:
+def test_watcher_pipeline(tmp_path):
     """Verify end-to-end file parsing, API prompting, markdown output formatting, and archiving."""
-    # Paths
-    raw_dir = os.path.expanduser("~/Vault/00_Inbox/Raw")
-    processed_dir = os.path.expanduser("~/Vault/00_Inbox/Processed")
-    archive_dir = os.path.expanduser("~/Vault/00_Inbox/Raw/Archive")
+    # Paths - use pytest tmp_path so CI doesn't need ~/Vault
+    raw_dir = tmp_path / "Raw"
+    processed_dir = tmp_path / "Processed"
+    archive_dir = raw_dir / "Archive"
 
-    # Ensure folders exist
-    os.makedirs(raw_dir, exist_ok=True)
-    os.makedirs(processed_dir, exist_ok=True)
-    os.makedirs(archive_dir, exist_ok=True)
+    raw_dir.mkdir()
+    processed_dir.mkdir()
+    archive_dir.mkdir()
 
-    # 1. Clean up test files if they exist
-    for d in [raw_dir, processed_dir, archive_dir]:
-        if os.path.exists(d):
-            for filename in os.listdir(d):
-                fp = os.path.join(d, filename)
-                if os.path.isfile(fp):
-                    os.remove(fp)
-
-    # 2. Create test files
+    # 1. Create test files
     # Test file 1: Text file (Informatik-Studium)
-    txt_path = os.path.join(raw_dir, "studium_notiz.txt")
-    with open(txt_path, "w", encoding="utf-8") as file_h:
-        file_h.write("Vorlesung Datenstrukturen und Algorithmen:\n")
-        file_h.write("Heute besprechen wir binäre Suchbäume, AVL-Bäume und Komplexitätsklassen.\n")
-        file_h.write(
-            "Wir müssen ein Übungsblatt 4 lösen bis nächsten Montag und Skript Kapitel 5 lesen.\n"
-        )
+    txt_path = raw_dir / "studium_notiz.txt"
+    txt_path.write_text(
+        "Vorlesung Datenstrukturen und Algorithmen:\n"
+        "Heute besprechen wir binäre Suchbäume, AVL-Bäume "
+        "und Komplexitätsklassen.\n"
+        "Wir müssen ein Übungsblatt 4 lösen bis nächsten "
+        "Montag und Skript Kapitel 5 lesen.\n",
+        encoding="utf-8",
+    )
 
     # Test file 2: URL file (Trading/Börse)
-    url_path = os.path.join(raw_dir, "trading_boerse.url")
-    with open(url_path, "w", encoding="utf-8") as file_h:
-        file_h.write("[InternetShortcut]\n")
-        file_h.write("URL=https://de.wikipedia.org/wiki/B%C3%B6rse\n")
+    url_path = raw_dir / "trading_boerse.url"
+    url_path.write_text(
+        "[InternetShortcut]\nURL=https://de.wikipedia.org/wiki/B%C3%B6rse\n",
+        encoding="utf-8",
+    )
 
-    # 3. Process files (using Mock)
+    # 2. Process files (using Mock)
     with (
-        patch("obsidian_inbox_watcher.main.load_api_key", return_value="dummy-key-for-testing"),
+        patch(
+            "obsidian_inbox_watcher.main.load_api_key",
+            return_value="dummy-key-for-testing",
+        ),
         patch("google.genai.Client", side_effect=get_mock_gemini_client),
     ):
-        watcher.process_file(txt_path)
-        watcher.process_file(url_path)
+        watcher.process_file(
+            str(txt_path),
+            processed_dir=str(processed_dir),
+            archive_dir=str(archive_dir),
+        )
+        watcher.process_file(
+            str(url_path),
+            processed_dir=str(processed_dir),
+            archive_dir=str(archive_dir),
+        )
 
-    # 4. Verification
-    processed_files = os.listdir(processed_dir)
+    # 3. Verification
+    processed_files = list(processed_dir.iterdir())
     assert len(processed_files) == 2, f"Expected 2 processed notes, found {len(processed_files)}"
 
-    for pf in processed_files:
-        pfp = os.path.join(processed_dir, pf)
-        with open(pfp, encoding="utf-8") as file_h:
-            content = file_h.read()
+    for pfp in processed_files:
+        content = pfp.read_text(encoding="utf-8")
 
         # Verify markdown template structure and frontmatter
         assert "created:" in content, "Frontmatter 'created' is missing"
@@ -147,8 +149,8 @@ def test_watcher_pipeline() -> None:
         assert "## Action Items" in content, "Heading '## Action Items' is missing"
         assert "- [ ]" in content, "Action items format incorrect"
 
-    # Verify Archive folder
-    archived_files = os.listdir(archive_dir)
+    # 4. Verify Archive folder
+    archived_files = [f.name for f in archive_dir.iterdir()]
     assert any(f.startswith("studium_notiz") for f in archived_files), (
         "studium_notiz.txt was not archived"
     )

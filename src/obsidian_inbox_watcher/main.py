@@ -65,8 +65,19 @@ def wait_for_file_to_be_written(
     return False
 
 
-def process_file(filepath: str) -> None:
-    """Extract content from file, process via Gemini, and generate Obsidian markdown note."""
+def process_file(
+    filepath: str,
+    *,
+    processed_dir: str | None = None,
+    archive_dir: str | None = None,
+) -> None:
+    """Extract content from file, process via Gemini, and generate Obsidian markdown note.
+
+    Args:
+        filepath: Path to the input file.
+        processed_dir: Override for the output notes directory.
+        archive_dir: Override for the archive directory.
+    """
     # Ensure filepath is absolute
     filepath = os.path.abspath(filepath)
     if not os.path.exists(filepath):
@@ -245,7 +256,8 @@ ai_processed: true
         safe_title = re.sub(r"\s+", "_", safe_title)
         filename = f"{created_date}_{safe_title}.md"
 
-        processed_dir = os.path.expanduser("~/Vault/00_Inbox/Processed")
+        if processed_dir is None:
+            processed_dir = os.path.expanduser("~/Vault/00_Inbox/Processed")
         out_filepath = os.path.join(processed_dir, filename)
 
         with open(out_filepath, "w", encoding="utf-8") as f:
@@ -253,7 +265,8 @@ ai_processed: true
         logger.info("Successfully processed and saved note to: %s", out_filepath)
 
         # Step 6: Move original file to archive directory
-        archive_dir = os.path.expanduser("~/Vault/00_Inbox/Raw/Archive")
+        if archive_dir is None:
+            archive_dir = os.path.expanduser("~/Vault/00_Inbox/Raw/Archive")
         base_name = os.path.basename(filepath)
         archive_filepath = os.path.join(archive_dir, base_name)
 
