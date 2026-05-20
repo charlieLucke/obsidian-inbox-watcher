@@ -1,6 +1,6 @@
-# PROJECT_NAME
+# obsidian_inbox_watcher
 
-PROJECT_DESCRIPTION
+Intelligenter local folder monitor und AI-processor für Obsidian Vault
 
 ## Setup
 
@@ -26,7 +26,7 @@ make help       # list all available commands
 ## Project Structure
 
 ```
-src/PROJECT_NAME/    Source code
+src/obsidian_inbox_watcher/    Source code
 tests/               Pytest tests (mirrors src/ layout)
 docs/ai/             AI agent context and plans
 .github/workflows/   CI configuration

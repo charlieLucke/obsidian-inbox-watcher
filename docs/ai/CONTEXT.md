@@ -17,7 +17,7 @@
 
 ## Project Layout
 ```
-src/PROJECT_NAME/    # all source code lives here
+src/obsidian_inbox_watcher/    # all source code lives here
 tests/               # mirrors src/ layout
 docs/ai/             # AI agent docs
 .github/workflows/   # CI

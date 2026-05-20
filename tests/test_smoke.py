@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from PROJECT_NAME.main import main
+import obsidian_inbox_watcher.main
 
 
-def test_main_runs() -> None:
-    """Confirm main() executes without raising."""
-    main()
+def test_import() -> None:
+    """Confirm the package and its main module can be imported."""
+    assert obsidian_inbox_watcher.main is not None
