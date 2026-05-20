@@ -4,7 +4,9 @@
 
 ## What this project does
 
-*(One paragraph: what is this, who is it for, what problem does it solve?)*
+This project is an autonomous local folder monitor and AI-powered processor for an Obsidian Vault. It acts as an intelligent ingestion funnel for a "Personal Corporate Memory" system. The application monitors a dedicated raw input folder (`~/Vault/00_Inbox/Raw`) for new documents (TXT, PDF, Word DOCX, and internet shortcut URL files).
+
+When a file is detected, the service extracts the text content (and crawls web pages if it's a URL), analyzes the content using the modern Google Gemini API (`gemini-2.5-flash`), determines project relevancy (classifying it into Trading, Informatik-Studium, Lucke Capital Services, or IT-Infrastruktur), extracts action items and open questions, formats a structured Obsidian Markdown note with appropriate frontmatter metadata into a processed folder, and archives the original input safely.
 
 ## Stack
 - **Language:** Python 3.12+
@@ -14,13 +16,22 @@
 - **Type checker:** mypy (strict)
 - **CI:** GitHub Actions
 - **Pre-commit:** enabled
+- **Core APIs:** Google GenAI SDK (gemini-2.5-flash)
 
 ## Project Layout
-```
-src/obsidian_inbox_watcher/    # all source code lives here
-tests/               # mirrors src/ layout
-docs/ai/             # AI agent docs
-.github/workflows/   # CI
+```text
+src/obsidian_inbox_watcher/    # All source code lives here
+├── __init__.py
+├── __main__.py
+└── main.py                    # Main watcher, extractor and processor loop
+tests/                         # Testing suite
+├── __init__.py
+├── test_smoke.py              # Import verification
+└── test_watcher.py            # End-to-end integration and API mocking tests
+deploy/                        # Deployment configuration
+├── obsidian-inbox-watcher.service  # Systemd user service unit
+└── README.md                  # Deployment administration guide
+docs/ai/                       # AI context and documentation
 ```
 
 ## Conventions
@@ -33,37 +44,23 @@ docs/ai/             # AI agent docs
 - `from __future__ import annotations` at top of every module
 
 ### Error handling
-- Raise specific exceptions, not bare `Exception`
-- Custom exceptions inherit from a project-specific base class
-- No bare `except:` clauses
-- Don't catch exceptions just to silence them
+- Coerce file event paths safely to strings from `bytes` to satisfy strict typing.
+- Always perform a stable-size check loop to make sure incoming files have fully finished writing before extraction.
+- Never let exceptions crash the main service loop; log errors to console/journal and proceed gracefully.
 
-### Naming
-- Modules: `lower_snake_case`
-- Classes: `PascalCase`
-- Functions/variables: `lower_snake_case`
-- Constants: `UPPER_SNAKE_CASE`
-- Private: leading underscore
-
-### Testing
-- One test file per source module: `src/foo/bar.py` → `tests/foo/test_bar.py`
-- Use pytest fixtures, not `setUp`/`tearDown`
-- Mark slow tests with `@pytest.mark.slow`
-- Mark integration tests with `@pytest.mark.integration`
-
-### Commits
-- Format: `<type>: <subject>` (types: feat, fix, refactor, test, docs, chore)
-- Imperative mood: "add X" not "added X"
-- One logical change per commit
-
-## Commands (always use these)
-- `make install` — install deps and pre-commit hooks
+## Commands
+- `make install` — install dependencies and git pre-commit hooks
 - `make test` — run tests with coverage
-- `make check` — full quality gate (lint + types + tests)
-- `make format` — auto-fix style
+- `make check` — run full quality gate (lint + typecheck + test)
+- `make format` — run Ruff auto-formatter and auto-fix lints
+- `make run` — run the watcher service locally via `uv`
 
 ## Known pitfalls
-*(Append discoveries here as you learn them. Examples: API rate limits, library quirks, env-specific bugs.)*
+- **Watchdog event paths:** `event.src_path` can be `str` or `bytes`. Must always coerce or check types to prevent static type errors.
+- **Isolated mypy in pre-commit:** Pre-commit mypy hook runs in an isolated environment that lacks standard package dependencies, which triggers a subclassing error on `FileSystemEventHandler`. Resolved by appending `# type: ignore[misc]` on the class inheritance line.
 
 ## Glossary
-*(Domain-specific terms used in this project. Helps AI agents understand business language.)*
+- **Raw Inbox:** Directory `~/Vault/00_Inbox/Raw` where files are dropped.
+- **Processed Inbox:** Directory `~/Vault/00_Inbox/Processed` where finished Obsidian notes are written.
+- **Archive:** Directory `~/Vault/00_Inbox/Raw/Archive` where original raw inputs are kept to avoid reprocessing.
+- **Personal Corporate Memory:** The user's Obsidian Vault structure designed to capture study material, trading insights, capital services, and infrastructure context.
