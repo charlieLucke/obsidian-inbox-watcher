@@ -257,7 +257,7 @@ ai_processed: true
         filename = f"{created_date}_{safe_title}.md"
 
         if processed_dir is None:
-            processed_dir = os.path.expanduser("~/Vault/00_Inbox/Processed")
+            processed_dir = os.path.expanduser("~/0_Pipeline/Out")
         out_filepath = os.path.join(processed_dir, filename)
 
         with open(out_filepath, "w", encoding="utf-8") as f:
@@ -266,7 +266,7 @@ ai_processed: true
 
         # Step 6: Move original file to archive directory
         if archive_dir is None:
-            archive_dir = os.path.expanduser("~/Vault/00_Inbox/Raw/Archive")
+            archive_dir = os.path.expanduser("~/0_Pipeline/Archive")
         base_name = os.path.basename(filepath)
         archive_filepath = os.path.join(archive_dir, base_name)
 
@@ -296,7 +296,7 @@ class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
             filepath = filepath.decode("utf-8")
 
         # Avoid processing any file inside Archive subfolder
-        if "Raw/Archive" in filepath:
+        if "0_Pipeline/Archive" in filepath:
             return
 
         ext = os.path.splitext(filepath)[1].lower()
@@ -332,7 +332,15 @@ def main() -> None:
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    raw_dir = os.path.expanduser("~/Vault/00_Inbox/Raw")
+    raw_dir = os.path.expanduser("~/0_Pipeline/In")
+    processed_dir = os.path.expanduser("~/0_Pipeline/Out")
+    archive_dir = os.path.expanduser("~/0_Pipeline/Archive")
+    config_dir = os.path.expanduser("~/.config/vault_watcher")
+
+    # Ensure all required directories exist (safe on first run / new PC)
+    for directory in [raw_dir, processed_dir, archive_dir, config_dir]:
+        os.makedirs(directory, exist_ok=True)
+
     logger.info("Starting Obsidian Inbox Watcher service.")
     logger.info("Monitoring folder: %s", raw_dir)
 
