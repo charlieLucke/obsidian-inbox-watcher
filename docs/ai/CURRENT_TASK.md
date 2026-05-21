@@ -15,11 +15,15 @@ Done — the service is installed and running; only the API key is pending.
 - [x] Fixed `deploy/obsidian-inbox-watcher.service` paths (user `charl`); linked + enabled + started
 - [x] Verified detection end-to-end (drops are detected; stops cleanly at the missing-key check)
 - [x] Updated docs (README, CONTEXT, ARCHITECTURE, DECISIONS, deploy/README)
+- [x] Moved the raw inbox to the Windows drive `F:\0_Pipeline\In`
+      (`/mnt/f/0_Pipeline/In`) + archive `/mnt/f/0_Pipeline/Archive`; added
+      `select_observer()` (polling on `/mnt`, inotify elsewhere) — drop
+      detection verified
 
 ## Next Steps
 - [ ] Paste the real `GEMINI_API_KEY` into `~/.config/vault_watcher/env`, then
       `systemctl --user restart obsidian-inbox-watcher`
-- [ ] Drop a test PDF in `~/0_Pipeline/In` and confirm a note appears in
+- [ ] Drop a test PDF in `F:\0_Pipeline\In` and confirm a note appears in
       `/mnt/f/vault/notes/inbox` and gets ingested by brain-watcher → Titan
 
 ## Blockers

@@ -66,7 +66,8 @@ docs/ai/                       # AI context and documentation
 The systemd unit loads these from `EnvironmentFile=~/.config/vault_watcher/env`; `main()` also calls `load_env_file()` so the same file works in dev runs. systemd does not expand `~`, so use absolute paths in the env file.
 
 ## Known pitfalls
-- **Processed dir must be inside Titan's vault for the integration.** Only files under `/mnt/f/vault` are ingested by brain-watcher → Titan. Keep the raw and archive dirs *outside* the vault so raw inputs are never indexed.
+- **Processed dir must be inside Titan's vault for the integration.** Only files under `/mnt/f/vault` are ingested by brain-watcher → Titan. Keep the raw and archive dirs *outside* the vault (e.g. `/mnt/f/0_Pipeline/`) so raw inputs are never indexed.
+- **inotify does not fire on the Windows drive mount (`/mnt/...`).** When the raw dir is a Windows folder (e.g. `/mnt/f/0_Pipeline/In` so you can drop files from Explorer), `select_observer()` switches to a `PollingObserver`; native inotify is used for Linux-home paths.
 - **Watchdog event paths:** `event.src_path` can be `str` or `bytes`. Always coerce/check types to satisfy strict typing.
 - **Isolated mypy in pre-commit:** the pre-commit mypy hook runs in an isolated env lacking deps, triggering a subclassing error on `FileSystemEventHandler`. Resolved with `# type: ignore[misc]` on the class line.
 - **mypy here checks `tests/` too** (`mypy src tests`): test helpers need real types — e.g. construct a `watchdog.events.FileCreatedEvent`, not an ad-hoc stub, and patch `time.sleep` via the dotted-path string form.

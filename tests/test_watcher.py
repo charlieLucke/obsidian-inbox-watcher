@@ -215,3 +215,11 @@ def test_inbox_handler_routes_configured_dirs(monkeypatch):
     assert calls["filepath"] == "/raw/note.txt"
     assert calls["processed_dir"] == "/out"
     assert calls["archive_dir"] == os.path.abspath("/arch")
+
+
+def test_select_observer_polling_for_mnt():
+    """Windows drive mounts (/mnt/...) need the polling observer; native otherwise."""
+    from watchdog.observers.polling import PollingObserver
+
+    assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
+    assert not isinstance(watcher.select_observer("/home/charl/0_Pipeline/In"), PollingObserver)

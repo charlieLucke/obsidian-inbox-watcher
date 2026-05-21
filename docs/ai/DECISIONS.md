@@ -44,3 +44,9 @@
 **Reasoning:** Makes this watcher the PDF/DOCX/URL → Markdown front end to the RAG system, closing the gap that brain-watcher only auto-ingests `.md` (PDFs otherwise need a manual CLI step). Integration is via the shared filesystem only — the two services stay independent.
 **Alternatives considered:** Calling Titan's `/ingest/file` HTTP API directly from this watcher (tighter coupling, duplicate retry/auth logic); leaving the pipelines disconnected (manual copy step).
 **Consequences:** Raw and archive dirs must stay *outside* `/mnt/f/vault` so raw inputs aren't indexed. brain-watcher's recursive polling observer handles the `/mnt` mount.
+
+## 2026-05-21: Raw inbox on the Windows drive + polling observer
+**Decision:** Put the raw drop folder on the Windows drive (`/mnt/f/0_Pipeline/In`, with archive at `/mnt/f/0_Pipeline/Archive`) and add `select_observer()` that returns a `PollingObserver` for `/mnt/*` paths and a native `Observer` elsewhere.
+**Reasoning:** The user drops files from Windows Explorer, so the inbox must be a Windows-visible folder. But inotify events are not delivered on the drvfs (`/mnt`) mount, so the default observer would never fire `on_created` — only the startup scan would work. Polling fixes detection (same approach brain-watcher already uses for the vault).
+**Alternatives considered:** Keeping the inbox in the WSL home (`~/0_Pipeline/In`) with inotify (fast, but awkward to reach from Windows); a Windows-side watcher (separate runtime).
+**Consequences:** Slightly higher CPU from polling; detection latency ~1–2 s. Linux-home inboxes still use inotify automatically.

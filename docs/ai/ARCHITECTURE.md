@@ -36,6 +36,7 @@ src/obsidian_inbox_watcher/
     ├── load_env_file()              # Load ~/.config/vault_watcher/env into os.environ
     ├── resolve_dir()                # Read a dir from an env var, else default
     ├── load_api_key()               # Gemini key from env / config file
+    ├── select_observer(watch_dir)   # PollingObserver on /mnt mounts, else inotify
     ├── wait_for_file_to_be_written()# Size-stability check
     ├── process_file(processed_dir, archive_dir)  # Extraction + Gemini + write + archive
     ├── process_existing_files()     # Drain files already present at startup
@@ -101,6 +102,9 @@ PDF/DOCX/URL → (this watcher: Gemini → .md) → /mnt/f/vault/notes/inbox/
   unreliable on the `/mnt` drvfs mount) and auto-ingests `.md` files.
 - Therefore `VAULT_WATCHER_PROCESSED_DIR` is set inside the vault, while the raw
   and archive dirs stay outside it so raw inputs are never indexed.
+- The raw inbox is a Windows folder (`/mnt/f/0_Pipeline/In`) so files can be
+  dropped from Explorer; `select_observer()` uses a polling observer there
+  because inotify events are not delivered on the drvfs mount.
 
 ## Deployment
 

@@ -18,6 +18,8 @@ from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
+from watchdog.observers.api import BaseObserver
+from watchdog.observers.polling import PollingObserver
 
 # Configure Logging
 logger = logging.getLogger(__name__)
@@ -47,6 +49,18 @@ def load_env_file(path: str = "~/.config/vault_watcher/env") -> None:
 def resolve_dir(env_var: str, default: str) -> str:
     """Resolve a directory from an env var, falling back to a default (expands ~)."""
     return os.path.expanduser(os.environ.get(env_var) or default)
+
+
+def select_observer(watch_dir: str) -> BaseObserver:
+    """Pick a watchdog observer for the watched directory.
+
+    inotify events are not delivered on the Windows drive mount (drvfs), so a
+    raw inbox under ``/mnt/...`` needs the polling observer; native inotify is
+    used everywhere else.
+    """
+    if watch_dir.startswith("/mnt/"):
+        return PollingObserver()
+    return Observer()
 
 
 def load_api_key() -> str | None:
@@ -388,9 +402,9 @@ def main() -> None:
     # Process existing files first (for robustness on reboot)
     process_existing_files(raw_dir, processed_dir, archive_dir)
 
-    # Set up watchdog observer
+    # Set up watchdog observer (polling on /mnt drive mounts; inotify elsewhere)
     event_handler = InboxHandler(processed_dir, archive_dir)
-    observer = Observer()
+    observer = select_observer(raw_dir)
     observer.schedule(event_handler, path=raw_dir, recursive=False)
     observer.start()
 

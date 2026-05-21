@@ -36,6 +36,11 @@ For the Titan integration set `VAULT_WATCHER_PROCESSED_DIR` to a folder inside
 Titan's vault, e.g. `/mnt/f/vault/notes/inbox`. Keep the raw and archive dirs
 *outside* the vault. See `docs/ai/ARCHITECTURE.md`.
 
+The raw dir may live on a Windows drive (e.g. `/mnt/f/0_Pipeline/In` →
+`F:\0_Pipeline\In`) so you can drop files from Explorer — the watcher
+auto-uses a polling observer there, since inotify is not delivered on the
+`/mnt` mount.
+
 ## Run & Develop
 
 ```bash

@@ -13,6 +13,10 @@ Model: Claude Opus 4.7
 - Wired the Titan integration: `VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox`, so brain-watcher auto-ingests generated notes into Titan.
 - Created `~/.config/vault_watcher/env` (key placeholder + dir overrides) and the pipeline/vault folders.
 - Updated README, CONTEXT, ARCHITECTURE, DECISIONS, deploy/README, CURRENT_TASK.
+- Moved the raw inbox to the Windows drive (`/mnt/f/0_Pipeline/In`, archive
+  `/mnt/f/0_Pipeline/Archive`) so files can be dropped from Explorer, and added
+  `select_observer()` (polling on `/mnt`, inotify elsewhere). Drop detection on
+  the mount verified.
 
 ## In progress
 - Nothing in flight.
