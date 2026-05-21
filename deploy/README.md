@@ -16,23 +16,27 @@ To install and enable this service on your local system:
    make install
    ```
 
-3. **Configure your Gemini API key**:
-   Ensure `~/.config/vault_watcher/env` contains:
+3. **Configure the key and folders** in `~/.config/vault_watcher/env`
+   (absolute paths — systemd does not expand `~`):
    ```ini
    GEMINI_API_KEY=your_actual_gemini_api_key_here
+   VAULT_WATCHER_RAW_DIR=/home/charl/0_Pipeline/In
+   VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox
+   VAULT_WATCHER_ARCHIVE_DIR=/home/charl/0_Pipeline/Archive
    ```
+   `chmod 600 ~/.config/vault_watcher/env` since it holds the key. Pointing
+   `VAULT_WATCHER_PROCESSED_DIR` inside Titan's vault (`/mnt/f/vault`) lets
+   `brain-watcher` auto-ingest every generated note (see `docs/ai/ARCHITECTURE.md`).
 
-4. **Symlink the service configuration to systemd user space**:
+4. **Link the unit into systemd user space**:
    ```bash
-   mkdir -p ~/.config/systemd/user/
-   ln -sf /home/charlie/Arbeitsplatz/Code/Projekte/obsidian-inbox-watcher/deploy/obsidian-inbox-watcher.service ~/.config/systemd/user/
+   systemctl --user link ~/projects/obsidian-inbox-watcher/deploy/obsidian-inbox-watcher.service
    ```
 
-5. **Reload and start the service**:
+5. **Reload, enable and start the service**:
    ```bash
    systemctl --user daemon-reload
-   systemctl --user enable obsidian-inbox-watcher.service
-   systemctl --user restart obsidian-inbox-watcher.service
+   systemctl --user enable --now obsidian-inbox-watcher.service
    ```
 
 ## Control Commands

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -157,3 +158,60 @@ def test_watcher_pipeline(tmp_path):
     assert any(f.startswith("trading_boerse") for f in archived_files), (
         "trading_boerse.url was not archived"
     )
+
+
+def test_resolve_dir_env_override(monkeypatch):
+    """An env var overrides the default directory."""
+    monkeypatch.setenv("VAULT_WATCHER_PROCESSED_DIR", "/mnt/f/vault/notes/inbox")
+    assert (
+        watcher.resolve_dir("VAULT_WATCHER_PROCESSED_DIR", "~/0_Pipeline/Out")
+        == "/mnt/f/vault/notes/inbox"
+    )
+
+
+def test_resolve_dir_default_expands_tilde(monkeypatch):
+    """Falling back to the default expands ~ to an absolute path."""
+    monkeypatch.delenv("VAULT_WATCHER_RAW_DIR", raising=False)
+    result = watcher.resolve_dir("VAULT_WATCHER_RAW_DIR", "~/0_Pipeline/In")
+    assert result == os.path.expanduser("~/0_Pipeline/In")
+    assert "~" not in result
+
+
+def test_load_env_file_no_override(tmp_path, monkeypatch):
+    """load_env_file fills missing vars but never overrides existing ones."""
+    env_file = tmp_path / "env"
+    env_file.write_text(
+        "# a comment\n"
+        "GEMINI_API_KEY=abc123\n"
+        "VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("VAULT_WATCHER_PROCESSED_DIR", "/already/set")
+
+    watcher.load_env_file(str(env_file))
+
+    assert os.environ["GEMINI_API_KEY"] == "abc123"
+    assert os.environ["VAULT_WATCHER_PROCESSED_DIR"] == "/already/set"
+
+
+def test_inbox_handler_routes_configured_dirs(monkeypatch):
+    """The handler forwards its configured processed/archive dirs to process_file."""
+    from watchdog.events import FileCreatedEvent
+
+    calls: dict[str, Any] = {}
+
+    def fake_process(filepath, *, processed_dir=None, archive_dir=None):
+        calls["filepath"] = filepath
+        calls["processed_dir"] = processed_dir
+        calls["archive_dir"] = archive_dir
+
+    monkeypatch.setattr(watcher, "process_file", fake_process)
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+
+    handler = watcher.InboxHandler("/out", "/arch")
+    handler.on_created(FileCreatedEvent("/raw/note.txt"))
+
+    assert calls["filepath"] == "/raw/note.txt"
+    assert calls["processed_dir"] == "/out"
+    assert calls["archive_dir"] == os.path.abspath("/arch")

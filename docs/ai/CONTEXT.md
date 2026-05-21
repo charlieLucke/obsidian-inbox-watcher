@@ -4,9 +4,11 @@
 
 ## What this project does
 
-This project is an autonomous local folder monitor and AI-powered processor for an Obsidian Vault. It acts as an intelligent ingestion funnel for a "Personal Corporate Memory" system. The application monitors a dedicated raw input folder (`~/Vault/00_Inbox/Raw`) for new documents (TXT, PDF, Word DOCX, and internet shortcut URL files).
+This project is an autonomous local folder monitor and AI-powered processor for an Obsidian Vault — an ingestion funnel for a "Personal Corporate Memory" system. It watches a raw input folder (default `~/0_Pipeline/In`, configurable) for new TXT, PDF, Word DOCX and internet-shortcut `.url` files.
 
-When a file is detected, the service extracts the text content (and crawls web pages if it's a URL), analyzes the content using the modern Google Gemini API (`gemini-2.5-flash`), determines project relevancy (classifying it into Trading, Informatik-Studium, Lucke Capital Services, or IT-Infrastruktur), extracts action items and open questions, formats a structured Obsidian Markdown note with appropriate frontmatter metadata into a processed folder, and archives the original input safely.
+When a file is detected, the service extracts the text (and crawls the web page for `.url` files), analyzes it with the Google Gemini API (`gemini-2.5-flash`), classifies it into one of four projects (Trading, Informatik-Studium, Lucke Capital Services, IT-Infrastruktur), extracts action items and open questions, writes a structured Obsidian Markdown note (YAML frontmatter, `ai_processed: true`) to the processed folder, and archives the original input safely.
+
+It is the document-processing **front end to Titan** (the RAG service). By pointing its processed-notes folder into Titan's vault (`/mnt/f/vault`, e.g. `notes/inbox/`), the `brain-watcher` service auto-ingests every generated note into Titan — giving the RAG system the PDF/DOCX/URL ingestion it otherwise lacks (brain-watcher only auto-ingests `.md`).
 
 ## Stack
 - **Language:** Python 3.12+
@@ -55,12 +57,23 @@ docs/ai/                       # AI context and documentation
 - `make format` — run Ruff auto-formatter and auto-fix lints
 - `make run` — run the watcher service locally via `uv`
 
+## Configuration
+- **`GEMINI_API_KEY`** — required; read from the process env or `~/.config/vault_watcher/env`. The literal `YOUR_GEMINI_API_KEY_HERE` counts as unset.
+- **`VAULT_WATCHER_RAW_DIR`** — folder watched for new files (default `~/0_Pipeline/In`).
+- **`VAULT_WATCHER_PROCESSED_DIR`** — where notes are written (default `~/0_Pipeline/Out`; set to `/mnt/f/vault/notes/inbox` for the Titan integration).
+- **`VAULT_WATCHER_ARCHIVE_DIR`** — where originals are moved (default `~/0_Pipeline/Archive`).
+
+The systemd unit loads these from `EnvironmentFile=~/.config/vault_watcher/env`; `main()` also calls `load_env_file()` so the same file works in dev runs. systemd does not expand `~`, so use absolute paths in the env file.
+
 ## Known pitfalls
-- **Watchdog event paths:** `event.src_path` can be `str` or `bytes`. Must always coerce or check types to prevent static type errors.
-- **Isolated mypy in pre-commit:** Pre-commit mypy hook runs in an isolated environment that lacks standard package dependencies, which triggers a subclassing error on `FileSystemEventHandler`. Resolved by appending `# type: ignore[misc]` on the class inheritance line.
+- **Processed dir must be inside Titan's vault for the integration.** Only files under `/mnt/f/vault` are ingested by brain-watcher → Titan. Keep the raw and archive dirs *outside* the vault so raw inputs are never indexed.
+- **Watchdog event paths:** `event.src_path` can be `str` or `bytes`. Always coerce/check types to satisfy strict typing.
+- **Isolated mypy in pre-commit:** the pre-commit mypy hook runs in an isolated env lacking deps, triggering a subclassing error on `FileSystemEventHandler`. Resolved with `# type: ignore[misc]` on the class line.
+- **mypy here checks `tests/` too** (`mypy src tests`): test helpers need real types — e.g. construct a `watchdog.events.FileCreatedEvent`, not an ad-hoc stub, and patch `time.sleep` via the dotted-path string form.
 
 ## Glossary
-- **Raw Inbox:** Directory `~/Vault/00_Inbox/Raw` where files are dropped.
-- **Processed Inbox:** Directory `~/Vault/00_Inbox/Processed` where finished Obsidian notes are written.
-- **Archive:** Directory `~/Vault/00_Inbox/Raw/Archive` where original raw inputs are kept to avoid reprocessing.
-- **Personal Corporate Memory:** The user's Obsidian Vault structure designed to capture study material, trading insights, capital services, and infrastructure context.
+- **Raw Inbox:** `VAULT_WATCHER_RAW_DIR` (default `~/0_Pipeline/In`) — where files are dropped.
+- **Processed:** `VAULT_WATCHER_PROCESSED_DIR` — where finished notes land; here `/mnt/f/vault/notes/inbox`.
+- **Archive:** `VAULT_WATCHER_ARCHIVE_DIR` (default `~/0_Pipeline/Archive`) — originals kept to avoid reprocessing.
+- **Titan / brain-watcher:** the RAG service and the daemon that watches `/mnt/f/vault` and ingests `.md` notes into it.
+- **Personal Corporate Memory:** the user's Obsidian vault capturing study, trading, capital-services and infrastructure context.

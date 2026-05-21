@@ -32,3 +32,15 @@
 **Reasoning:** Systemd user-level services can easily read clean `EnvironmentFile=` files. This completely isolates private API keys from getting tracked inside Git histories.
 **Alternatives considered:** Injecting keys via command-line arguments (insecure as they appear in system process lists), or standard environment variables (requires exporting in multiple shells and isn't captured by systemd automatically).
 **Consequences:** The environment file must be created on any target PC before activating the systemd service.
+
+## 2026-05-21: Make the raw/processed/archive dirs env-configurable
+**Decision:** Read the three working directories from `VAULT_WATCHER_RAW_DIR` / `VAULT_WATCHER_PROCESSED_DIR` / `VAULT_WATCHER_ARCHIVE_DIR` (with the previous `~/0_Pipeline/*` values as defaults), and load `~/.config/vault_watcher/env` into `os.environ` at startup. `InboxHandler` now carries the processed/archive dirs and forwards them to `process_file`.
+**Reasoning:** The paths were hardcoded in `main()` and the event handler called `process_file` without overrides, so output could not be redirected without editing code. Configurability is required to point the output into Titan's vault.
+**Alternatives considered:** Symlinking `~/0_Pipeline/Out` into the vault (hidden, fragile across machines); editing paths in code per machine (not portable).
+**Consequences:** Deployment is configured via the systemd `EnvironmentFile`; defaults keep standalone use unchanged.
+
+## 2026-05-21: Write processed notes into Titan's vault for auto-ingestion
+**Decision:** Set `VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox` so generated notes land inside Titan's `VAULT_ROOT`, where `brain-watcher` picks them up and ingests them into Titan/Qdrant.
+**Reasoning:** Makes this watcher the PDF/DOCX/URL → Markdown front end to the RAG system, closing the gap that brain-watcher only auto-ingests `.md` (PDFs otherwise need a manual CLI step). Integration is via the shared filesystem only — the two services stay independent.
+**Alternatives considered:** Calling Titan's `/ingest/file` HTTP API directly from this watcher (tighter coupling, duplicate retry/auth logic); leaving the pipelines disconnected (manual copy step).
+**Consequences:** Raw and archive dirs must stay *outside* `/mnt/f/vault` so raw inputs aren't indexed. brain-watcher's recursive polling observer handles the `/mnt` mount.

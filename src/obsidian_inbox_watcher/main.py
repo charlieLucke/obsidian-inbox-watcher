@@ -23,6 +23,32 @@ from watchdog.observers import Observer
 logger = logging.getLogger(__name__)
 
 
+def load_env_file(path: str = "~/.config/vault_watcher/env") -> None:
+    """Populate os.environ from a simple KEY=VALUE config file.
+
+    Existing environment variables are not overridden, so systemd's
+    EnvironmentFile (or a real shell export) always wins over the file.
+    """
+    env_path = os.path.expanduser(path)
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+    except OSError as e:
+        logger.error("Failed to read env file %s: %s", env_path, e)
+
+
+def resolve_dir(env_var: str, default: str) -> str:
+    """Resolve a directory from an env var, falling back to a default (expands ~)."""
+    return os.path.expanduser(os.environ.get(env_var) or default)
+
+
 def load_api_key() -> str | None:
     """Load the Gemini API key from environment or config file."""
     # 1. Try environment
@@ -286,6 +312,11 @@ ai_processed: true
 class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
     """Event handler for monitoring files in raw inbox."""
 
+    def __init__(self, processed_dir: str, archive_dir: str) -> None:
+        super().__init__()
+        self._processed_dir = processed_dir
+        self._archive_dir = os.path.abspath(archive_dir)
+
     def on_created(self, event: FileSystemEvent) -> None:
         """Triggered when a file is created."""
         if event.is_directory:
@@ -295,8 +326,8 @@ class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
         if isinstance(filepath, bytes):
             filepath = filepath.decode("utf-8")
 
-        # Avoid processing any file inside Archive subfolder
-        if "0_Pipeline/Archive" in filepath:
+        # Never reprocess files that live in the archive directory.
+        if os.path.abspath(filepath).startswith(self._archive_dir + os.sep):
             return
 
         ext = os.path.splitext(filepath)[1].lower()
@@ -304,23 +335,29 @@ class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
             logger.info("New incoming file detected: %s", filepath)
             # Small initial sleep to let file creation settle
             time.sleep(0.5)
-            process_file(filepath)
+            process_file(
+                filepath,
+                processed_dir=self._processed_dir,
+                archive_dir=self._archive_dir,
+            )
 
 
-def process_existing_files(raw_dir: str) -> None:
+def process_existing_files(raw_dir: str, processed_dir: str, archive_dir: str) -> None:
     """Scan and process files that already exist in the raw directory."""
     logger.info("Scanning for existing un-processed raw files in %s...", raw_dir)
     try:
-        for entry in os.listdir(raw_dir):
-            filepath = os.path.join(raw_dir, entry)
-            if os.path.isdir(filepath):
-                continue
-            ext = os.path.splitext(entry)[1].lower()
-            if ext in [".pdf", ".txt", ".docx", ".url"]:
-                logger.info("Found existing file at startup: %s", filepath)
-                process_file(filepath)
-    except Exception as e:
+        entries = os.listdir(raw_dir)
+    except OSError as e:
         logger.error("Error scanning existing files: %s", e)
+        return
+    for entry in entries:
+        filepath = os.path.join(raw_dir, entry)
+        if os.path.isdir(filepath):
+            continue
+        ext = os.path.splitext(entry)[1].lower()
+        if ext in [".pdf", ".txt", ".docx", ".url"]:
+            logger.info("Found existing file at startup: %s", filepath)
+            process_file(filepath, processed_dir=processed_dir, archive_dir=archive_dir)
 
 
 def main() -> None:
@@ -332,9 +369,13 @@ def main() -> None:
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    raw_dir = os.path.expanduser("~/0_Pipeline/In")
-    processed_dir = os.path.expanduser("~/0_Pipeline/Out")
-    archive_dir = os.path.expanduser("~/0_Pipeline/Archive")
+    # Load the config file so dir overrides + the API key are available whether
+    # we run under systemd (EnvironmentFile) or directly.
+    load_env_file()
+
+    raw_dir = resolve_dir("VAULT_WATCHER_RAW_DIR", "~/0_Pipeline/In")
+    processed_dir = resolve_dir("VAULT_WATCHER_PROCESSED_DIR", "~/0_Pipeline/Out")
+    archive_dir = resolve_dir("VAULT_WATCHER_ARCHIVE_DIR", "~/0_Pipeline/Archive")
     config_dir = os.path.expanduser("~/.config/vault_watcher")
 
     # Ensure all required directories exist (safe on first run / new PC)
@@ -342,13 +383,13 @@ def main() -> None:
         os.makedirs(directory, exist_ok=True)
 
     logger.info("Starting Obsidian Inbox Watcher service.")
-    logger.info("Monitoring folder: %s", raw_dir)
+    logger.info("Monitoring %s  ->  notes: %s", raw_dir, processed_dir)
 
     # Process existing files first (for robustness on reboot)
-    process_existing_files(raw_dir)
+    process_existing_files(raw_dir, processed_dir, archive_dir)
 
     # Set up watchdog observer
-    event_handler = InboxHandler()
+    event_handler = InboxHandler(processed_dir, archive_dir)
     observer = Observer()
     observer.schedule(event_handler, path=raw_dir, recursive=False)
     observer.start()

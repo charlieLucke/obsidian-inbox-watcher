@@ -4,27 +4,26 @@
 
 ## Goal
 
-The core migration task has been **completed successfully**. The Obsidian Vault Inbox Watcher is fully operational in its new package-based structure. The background daemon is active and running cleanly on the local laptop.
+Set up the watcher on the Haupt-PC (WSL2) and wire it into the Titan RAG system.
+Done — the service is installed and running; only the API key is pending.
 
 ## Completed Steps
-- [x] Clone and rename `python-template` to `obsidian-inbox-watcher`
-- [x] Initialized directory structure using template scripts
-- [x] Migrated logic to `src/obsidian_inbox_watcher/main.py` with strict static typing
-- [x] Configured dependency management and tools in `pyproject.toml`
-- [x] Implemented integration and unit tests in `tests/test_watcher.py` using Gemini API mocks
-- [x] Executed quality analysis (`ruff`, `mypy strict`, `pytest`) successfully (all green)
-- [x] Swapped laptop background systemd service to use the new virtual environment executable
-- [x] Forced-pushed the clean package codebase to GitHub `charlievincentlucke-afk/obsidian-inbox-watcher`
-- [x] Documented architecture, decisions, context, and deployment details
+- [x] Cloned to `~/projects/obsidian-inbox-watcher`, `uv sync`
+- [x] Made the working dirs env-configurable (`VAULT_WATCHER_*`) + `load_env_file()`
+- [x] Created `~/.config/vault_watcher/env` (key placeholder + dir overrides, chmod 600)
+- [x] Created `~/0_Pipeline/{In,Archive}` and `/mnt/f/vault/notes/inbox`
+- [x] Fixed `deploy/obsidian-inbox-watcher.service` paths (user `charl`); linked + enabled + started
+- [x] Verified detection end-to-end (drops are detected; stops cleanly at the missing-key check)
+- [x] Updated docs (README, CONTEXT, ARCHITECTURE, DECISIONS, deploy/README)
 
 ## Next Steps
-- [ ] Clone the repository on your main PC (Haupt-PC)
-- [ ] Configure `GEMINI_API_KEY` under `~/.config/vault_watcher/env` on the Haupt-PC
-- [ ] Symlink and start the systemd user service on the Haupt-PC using `make install` and the guide in `deploy/README.md`
-- [ ] Enjoy seamless, robust background obsidian inbox crawling!
+- [ ] Paste the real `GEMINI_API_KEY` into `~/.config/vault_watcher/env`, then
+      `systemctl --user restart obsidian-inbox-watcher`
+- [ ] Drop a test PDF in `~/0_Pipeline/In` and confirm a note appears in
+      `/mnt/f/vault/notes/inbox` and gets ingested by brain-watcher → Titan
 
 ## Blockers
-*None.*
+- API key not yet set (placeholder in place); processing is a no-op until then.
 
 ## Notes
-- The automated tests run extremely fast and mock out actual API calls, so they can be run offline using `make test`.
+- Tests mock the Gemini API, so `make check` runs offline.

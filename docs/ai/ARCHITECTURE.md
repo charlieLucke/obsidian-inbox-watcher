@@ -32,12 +32,15 @@ graph TD
 src/obsidian_inbox_watcher/
 ├── __init__.py           # Package imports
 ├── __main__.py           # Executable entrypoint
-└── main.py               # Monolithic, highly-optimized service
-    ├── load_api_key()             # Config/Env loading
-    ├── wait_for_file_to_be_written() # Size stability check
-    ├── process_file()             # Ingestion & Extraction pipeline
-    ├── InboxHandler(FileSystemEventHandler) # Directory observer
-    └── main()                     # Startup bootstrap & monitor loop
+└── main.py               # Single-module service
+    ├── load_env_file()              # Load ~/.config/vault_watcher/env into os.environ
+    ├── resolve_dir()                # Read a dir from an env var, else default
+    ├── load_api_key()               # Gemini key from env / config file
+    ├── wait_for_file_to_be_written()# Size-stability check
+    ├── process_file(processed_dir, archive_dir)  # Extraction + Gemini + write + archive
+    ├── process_existing_files()     # Drain files already present at startup
+    ├── InboxHandler(processed_dir, archive_dir)  # watchdog observer → process_file
+    └── main()                       # Resolve config, start observer, monitor loop
 ```
 
 ## Data Model & Formats
@@ -80,12 +83,31 @@ ai_processed: true
 2. **Settle**: Active loop waits up to 10 seconds for file size to stabilize.
 3. **Extraction**: Readable text is isolated based on extension.
 4. **API Prompting**: Prepares a strict German system instruction prompt and sends it to the Gemini client.
-5. **Obsidian Write**: Parses the returned JSON schema and saves the YAML frontmatter note with date/title under `~/Vault/00_Inbox/Processed`.
-6. **Clean**: Original file is moved into `~/Vault/00_Inbox/Raw/Archive` (with a timestamp suffix added if it already exists).
+5. **Obsidian Write**: Parses the returned JSON and saves the YAML-frontmatter note under `VAULT_WATCHER_PROCESSED_DIR` (default `~/0_Pipeline/Out`; set to `/mnt/f/vault/notes/inbox` in this deployment).
+6. **Clean**: Original file is moved into `VAULT_WATCHER_ARCHIVE_DIR` (default `~/0_Pipeline/Archive`), with a timestamp suffix if a same-named file already exists.
+
+## Integration with Titan (RAG)
+
+This watcher is the document-processing front end to the Titan RAG service. The
+two systems are decoupled through the shared filesystem — no code coupling:
+
+```
+PDF/DOCX/URL → (this watcher: Gemini → .md) → /mnt/f/vault/notes/inbox/
+            → brain-watcher (polls /mnt/f/vault) → Titan /ingest/file → Qdrant
+```
+
+- Titan only accepts paths under `VAULT_ROOT` (`/mnt/f/vault`); brain-watcher
+  watches that tree **recursively** with a polling observer (inotify is
+  unreliable on the `/mnt` drvfs mount) and auto-ingests `.md` files.
+- Therefore `VAULT_WATCHER_PROCESSED_DIR` is set inside the vault, while the raw
+  and archive dirs stay outside it so raw inputs are never indexed.
 
 ## Deployment
 
-The service is deployed locally as a **Systemd User-Level Service** under user `charlie`.
-- **Unit Configuration**: Located in `deploy/obsidian-inbox-watcher.service`.
-- **Environment**: Reads `EnvironmentFile=/home/charlie/.config/vault_watcher/env`.
-- **Executable**: Starts via `/home/charlie/Arbeitsplatz/Code/Projekte/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
+Deployed as a **systemd user service** (user `charl`) in the WSL2 environment.
+- **Unit:** `deploy/obsidian-inbox-watcher.service`, linked into
+  `~/.config/systemd/user/`.
+- **Environment:** `EnvironmentFile=/home/charl/.config/vault_watcher/env`
+  (Gemini key + the `VAULT_WATCHER_*` dir overrides).
+- **Executable:**
+  `/home/charl/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
