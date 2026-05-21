@@ -17,6 +17,10 @@ Model: Claude Opus 4.7
   `/mnt/f/0_Pipeline/Archive`) so files can be dropped from Explorer, and added
   `select_observer()` (polling on `/mnt`, inotify elsewhere). Drop detection on
   the mount verified.
+- Aligned the note frontmatter with Titan: required `domain:` field (Titan
+  rejects notes without it), seed list `VAULT_WATCHER_DOMAINS` passed to Gemini,
+  new domains allowed, `normalize_domain()` for exact Qdrant matching. Removed
+  the old fixed `category`.
 
 ## In progress
 - Nothing in flight.

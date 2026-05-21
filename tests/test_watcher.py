@@ -33,7 +33,7 @@ def get_mock_gemini_client(api_key: str | None = None) -> MagicMock:
         if "vorlesung" in actual_text or "studium" in actual_text or "avl" in actual_text:
             mock_json = {
                 "titel": "Datenstrukturen und Algorithmen Vorlesung",
-                "category": "Informatik-Studium",
+                "domain": "lernen",
                 "tags": ["Informatik", "Studium", "Algorithmen", "Datenstrukturen", "AVL-Bäume"],
                 "summary": (
                     "In dieser Vorlesung geht es um binäre Suchbäume, "
@@ -53,7 +53,7 @@ def get_mock_gemini_client(api_key: str | None = None) -> MagicMock:
         ):
             mock_json = {
                 "titel": "Börse und Finanzmärkte Grundlagen",
-                "category": "Trading",
+                "domain": "trading",
                 "tags": ["Trading", "Börse", "Finanzen", "Aktien", "Marktplatz"],
                 "summary": (
                     "Eine Einführung in das Funktionieren von Börsen und "
@@ -68,7 +68,7 @@ def get_mock_gemini_client(api_key: str | None = None) -> MagicMock:
         else:
             mock_json = {
                 "titel": "Musterdokument Analyse",
-                "category": "IT-Infrastruktur",
+                "domain": "system",
                 "tags": ["Infrastruktur", "Systeme", "Netzwerk", "Automatisierung", "Linux"],
                 "summary": "Ein allgemeines Dokument zur IT-Infrastruktur und Automatisierung.",
                 "questions": "Welche Skalierungsanforderungen gibt es für dieses System?",
@@ -140,7 +140,7 @@ def test_watcher_pipeline(tmp_path):
         # Verify markdown template structure and frontmatter
         assert "created:" in content, "Frontmatter 'created' is missing"
         assert "source:" in content, "Frontmatter 'source' is missing"
-        assert "category:" in content, "Frontmatter 'category' is missing"
+        assert "domain:" in content, "Frontmatter 'domain' is missing"
         assert "tags:" in content, "Frontmatter 'tags' is missing"
         assert "ai_processed: true" in content, "Frontmatter 'ai_processed' is missing"
         assert "## Zusammenfassung" in content, "Heading '## Zusammenfassung' is missing"
@@ -223,3 +223,24 @@ def test_select_observer_polling_for_mnt():
 
     assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
     assert not isinstance(watcher.select_observer("/home/charl/0_Pipeline/In"), PollingObserver)
+
+
+def test_get_known_domains_default(monkeypatch):
+    """Without the env var, the default Titan domains are returned."""
+    monkeypatch.delenv("VAULT_WATCHER_DOMAINS", raising=False)
+    assert watcher.get_known_domains() == ["business", "lernen", "projekte", "system"]
+
+
+def test_get_known_domains_env_override(monkeypatch):
+    """The env var overrides and is split/trimmed; empty entries are dropped."""
+    monkeypatch.setenv("VAULT_WATCHER_DOMAINS", " trading , lernen ,, system ")
+    assert watcher.get_known_domains() == ["trading", "lernen", "system"]
+
+
+def test_normalize_domain():
+    """Domains are lowercased, space-free and stripped to a stable token."""
+    assert watcher.normalize_domain("Trading") == "trading"
+    assert watcher.normalize_domain("IT-Infrastruktur") == "it-infrastruktur"
+    assert watcher.normalize_domain("Lucke Capital Services") == "lucke-capital-services"
+    assert watcher.normalize_domain("Ernährung") == "ernährung"
+    assert watcher.normalize_domain("   ") == "inbox"

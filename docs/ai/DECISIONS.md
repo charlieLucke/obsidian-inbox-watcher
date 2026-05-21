@@ -50,3 +50,9 @@
 **Reasoning:** The user drops files from Windows Explorer, so the inbox must be a Windows-visible folder. But inotify events are not delivered on the drvfs (`/mnt`) mount, so the default observer would never fire `on_created` — only the startup scan would work. Polling fixes detection (same approach brain-watcher already uses for the vault).
 **Alternatives considered:** Keeping the inbox in the WSL home (`~/0_Pipeline/In`) with inotify (fast, but awkward to reach from Windows); a Windows-side watcher (separate runtime).
 **Consequences:** Slightly higher CPU from polling; detection latency ~1–2 s. Linux-home inboxes still use inotify automatically.
+
+## 2026-05-21: Emit Titan-compatible frontmatter with a dynamic `domain`
+**Decision:** Replace the fixed `category` (4 hardcoded projects) with a `domain` frontmatter field. Gemini receives a seed list of existing Titan domains (`VAULT_WATCHER_DOMAINS`, default `business,lernen,projekte,system`) and chooses the best fit or invents a new concise domain; the value is run through `normalize_domain()` (lowercase, space-free).
+**Reasoning:** Titan's `read_markdown` **requires** a non-empty `domain` field and filters on it exactly in Qdrant — the old notes (with only `category`) would have been rejected at ingest. Seeding the known domains keeps the graph consistent while still allowing growth.
+**Alternatives considered:** Fetching the live domain list from Titan's `/domains` per file (tighter coupling + a failure mode when Titan is down; the endpoint was also unreachable during setup); keeping the fixed 4 categories (rejected by Titan).
+**Consequences:** Domains must be normalized consistently (casing/spacing matters for the Qdrant filter). The seed list can drift from Titan's real domains, but new-domain creation + the env override keep it manageable.

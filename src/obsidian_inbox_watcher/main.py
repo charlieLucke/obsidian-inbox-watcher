@@ -63,6 +63,29 @@ def select_observer(watch_dir: str) -> BaseObserver:
     return Observer()
 
 
+# Existing Titan domains to steer classification toward a consistent graph.
+# Gemini may still invent a new domain when none of these fit.
+_DEFAULT_DOMAINS = ("business", "lernen", "projekte", "system")
+
+
+def get_known_domains() -> list[str]:
+    """Return the seed list of Titan domains (comma-separated env override)."""
+    raw = os.environ.get("VAULT_WATCHER_DOMAINS", "")
+    domains = [d.strip() for d in raw.split(",") if d.strip()]
+    return domains or list(_DEFAULT_DOMAINS)
+
+
+def normalize_domain(value: str) -> str:
+    """Normalize a domain to a lowercase, space-free token for stable filtering.
+
+    Titan matches the ``domain`` payload exactly in Qdrant, so casing and
+    whitespace must be canonical. German umlauts are preserved.
+    """
+    slug = re.sub(r"\s+", "-", value.strip().lower())
+    slug = re.sub(r"[^0-9a-zäöüß_-]", "", slug)
+    return slug.strip("-") or "inbox"
+
+
 def load_api_key() -> str | None:
     """Load the Gemini API key from environment or config file."""
     # 1. Try environment
@@ -205,23 +228,27 @@ def process_file(
         client = genai.Client(api_key=api_key)
 
         # Step 3: LLM Process Prompt
+        known_domains = get_known_domains()
+        domains_block = "\n".join(f"- {d}" for d in known_domains)
         prompt = f"""
-Du bist ein hochpräziser Informations-Analysator für ein "Personal Corporate Memory" System.
-Deine Aufgabe ist es, den folgenden Textinhalt kritisch zu analysieren,
-Relevanzprüfungen vorzunehmen und strukturiert aufzubereiten.
+Du bist ein hochpräziser Informations-Analysator für ein "Personal Corporate Memory"
+System. Die erzeugten Notizen werden anschließend von der RAG-Engine "Titan"
+indexiert; das Feld "domain" steuert die Einordnung im Wissensgraph.
 
-Zielkategorien für Projekte (Wähle zwingend eine dieser vier aus):
-- Trading
-- Informatik-Studium
-- Lucke Capital Services
-- IT-Infrastruktur
+Ordne den Inhalt EINER Domain zu. Bevorzuge eine bereits existierende Domain,
+damit der Graph konsistent bleibt:
+{domains_block}
+
+Wenn keine davon inhaltlich passt, darfst du eine NEUE, treffende Domain vergeben.
+Regeln für "domain": ein einzelnes, kleingeschriebenes deutsches Wort ohne
+Leerzeichen (Bindestrich erlaubt), z.B. "trading" oder "infrastruktur".
 
 Du MUSST das Ergebnis als ein valides JSON-Objekt im folgenden Format zurückgeben.
 
 JSON-Struktur:
 {{
   "titel": "Ein kurzer, prägnanter und aussagekräftiger deutscher Titel",
-  "category": "Trading oder Informatik-Studium oder Lucke Capital Services oder IT-Infrastruktur",
+  "domain": "eine der obigen Domains oder eine neue, passende Domain",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
   "summary": "Eine prägnante Zusammenfassung des Inhalts in deutscher Sprache.",
   "questions": "Relevante Wissenslücken oder Fragen an den Benutzer (Fragen an mich).",
@@ -229,9 +256,7 @@ JSON-Struktur:
 }}
 
 Textinhalt, der analysiert werden soll:
----
 {text_content[:20000]}
----
 """
 
         logger.info("Querying Gemini API (gemini-2.5-flash)...")
@@ -247,10 +272,11 @@ Textinhalt, der analysiert werden soll:
             return
 
         result: dict[str, Any] = json.loads(response.text)
+        domain = normalize_domain(str(result.get("domain") or ""))
         logger.info(
-            "Gemini API returned valid response. Title: '%s', Category: '%s'",
+            "Gemini API returned valid response. Title: '%s', Domain: '%s'",
             result.get("titel"),
-            result.get("category"),
+            domain,
         )
 
         # Format tags to make sure we have exactly 5 elements
@@ -271,9 +297,9 @@ Textinhalt, der analysiert werden soll:
         # Format YAML metadata and document structure
         created_date = datetime.datetime.now().strftime("%Y-%m-%d")
         markdown_content = f"""---
+domain: {domain}
 created: {created_date}
 source: {source_origin}
-category: {result.get("category", "Sonstiges")}
 tags: [{tags_str}]
 ai_processed: true
 ---

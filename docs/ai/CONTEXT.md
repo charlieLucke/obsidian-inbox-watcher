@@ -62,6 +62,10 @@ docs/ai/                       # AI context and documentation
 - **`VAULT_WATCHER_RAW_DIR`** — folder watched for new files (default `~/0_Pipeline/In`).
 - **`VAULT_WATCHER_PROCESSED_DIR`** — where notes are written (default `~/0_Pipeline/Out`; set to `/mnt/f/vault/notes/inbox` for the Titan integration).
 - **`VAULT_WATCHER_ARCHIVE_DIR`** — where originals are moved (default `~/0_Pipeline/Archive`).
+- **`VAULT_WATCHER_DOMAINS`** — comma-separated seed list of existing Titan domains handed to Gemini for consistent classification (default `business,lernen,projekte,system`). Gemini may still invent a new domain when none fit.
+
+## Titan frontmatter contract
+Generated notes carry a **required `domain:`** field (Titan's `read_markdown` raises if it is missing/empty; `indexed: false` skips a note). The domain is normalized to a lowercase, space-free token because Titan filters on it exactly in Qdrant. The note's H1 becomes Titan's document title; other frontmatter keys (`created`, `source`, `tags`, `ai_processed`) are ignored by Titan but useful in Obsidian.
 
 The systemd unit loads these from `EnvironmentFile=~/.config/vault_watcher/env`; `main()` also calls `load_env_file()` so the same file works in dev runs. systemd does not expand `~`, so use absolute paths in the env file.
 

@@ -53,11 +53,18 @@ src/obsidian_inbox_watcher/
 4. **URL (`.url`)**: Parsed using standard `ini` structure looking for `URL=...`. Web page is requested using `requests` with a Chromium user-agent and HTML tags (`script`, `style`, `nav`, `footer`, etc.) decomposed via `BeautifulSoup` to isolate readable body text.
 
 ### Output Obsidian Markdown Note
+
+`domain` is first and is **required by Titan** (`read_markdown` raises if it is
+missing/empty; set `indexed: false` to skip a note instead). It is normalized to
+a lowercase, space-free token because Titan filters on it exactly in Qdrant. The
+H1 becomes Titan's `document_title`. The other frontmatter keys are extra context
+for Obsidian and are ignored by Titan.
+
 ```markdown
 ---
+domain: [existing Titan domain or a new one Gemini chose]
 created: YYYY-MM-DD
 source: [Absolute File Path or Crawled URL]
-category: [Trading | Informatik-Studium | Lucke Capital Services | IT-Infrastruktur]
 tags: ["tag1", "tag2", "tag3", "tag4", "tag5"]
 ai_processed: true
 ---
@@ -76,7 +83,7 @@ ai_processed: true
 ```
 
 ## External Services
-1. **Google Gemini API**: Utilizes `gemini-2.5-flash` model with structural output enforcement (`response_mime_type="application/json"`). Relevancy constraints are enforced to map to predefined user projects. Requires a valid `GEMINI_API_KEY` loaded from `~/.config/vault_watcher/env` or system environment.
+1. **Google Gemini API**: Utilizes `gemini-2.5-flash` model with structural output enforcement (`response_mime_type="application/json"`). The prompt receives the seed domain list (`VAULT_WATCHER_DOMAINS`) and classifies the content into one existing Titan domain or a new one. Requires a valid `GEMINI_API_KEY` loaded from `~/.config/vault_watcher/env` or system environment.
 2. **Target Web Servers**: Requested dynamically when processing `.url` shortcuts to fetch information. Timeout is set to 15s.
 
 ## Data Flow

@@ -19,6 +19,9 @@ Done — the service is installed and running; only the API key is pending.
       (`/mnt/f/0_Pipeline/In`) + archive `/mnt/f/0_Pipeline/Archive`; added
       `select_observer()` (polling on `/mnt`, inotify elsewhere) — drop
       detection verified
+- [x] Aligned frontmatter with Titan: required `domain:` field, seed domain
+      list (`VAULT_WATCHER_DOMAINS`) passed to Gemini, new domains allowed,
+      `normalize_domain()` for consistent Qdrant filtering
 
 ## Next Steps
 - [ ] Paste the real `GEMINI_API_KEY` into `~/.config/vault_watcher/env`, then
