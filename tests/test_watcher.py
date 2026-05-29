@@ -217,6 +217,48 @@ def test_inbox_handler_routes_configured_dirs(monkeypatch):
     assert calls["archive_dir"] == os.path.abspath("/arch")
 
 
+def test_inbox_handler_processes_moved_file(monkeypatch):
+    """on_moved dispatches the moved-in (dest) path — Syncthing delivers via rename."""
+    from watchdog.events import FileMovedEvent
+
+    calls: dict[str, Any] = {}
+
+    def fake_process(filepath, *, processed_dir=None, archive_dir=None):
+        calls["filepath"] = filepath
+        calls["processed_dir"] = processed_dir
+        calls["archive_dir"] = archive_dir
+
+    monkeypatch.setattr(watcher, "process_file", fake_process)
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+
+    handler = watcher.InboxHandler("/out", "/arch")
+    handler.on_moved(FileMovedEvent("/tmp/.syncthing.note.txt.tmp", "/raw/note.txt"))
+
+    assert calls["filepath"] == os.path.abspath("/raw/note.txt")
+    assert calls["processed_dir"] == "/out"
+    assert calls["archive_dir"] == os.path.abspath("/arch")
+
+
+def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
+    """rescan() re-dispatches supported files but skips unsupported files and subdirs."""
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "keep.txt").write_text("x", encoding="utf-8")
+    (raw_dir / "ignore.bin").write_text("x", encoding="utf-8")
+    (raw_dir / "sub").mkdir()
+
+    processed: list[str] = []
+    monkeypatch.setattr(
+        watcher, "process_file", lambda fp, **_kw: processed.append(fp)
+    )
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+
+    handler = watcher.InboxHandler(str(tmp_path / "out"), str(tmp_path / "arch"))
+    handler.rescan(str(raw_dir))
+
+    assert processed == [os.path.abspath(str(raw_dir / "keep.txt"))]
+
+
 def test_select_observer_polling_for_mnt():
     """Windows drive mounts (/mnt/...) need the polling observer; native otherwise."""
     from watchdog.observers.polling import PollingObserver
