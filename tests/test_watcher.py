@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import requests
 
 from obsidian_inbox_watcher import main as watcher
 
@@ -201,20 +204,22 @@ def test_inbox_handler_routes_configured_dirs(monkeypatch):
 
     calls: dict[str, Any] = {}
 
-    def fake_process(filepath, *, processed_dir=None, archive_dir=None):
+    def fake_process(filepath, *, processed_dir=None, archive_dir=None, failed_dir=None):
         calls["filepath"] = filepath
         calls["processed_dir"] = processed_dir
         calls["archive_dir"] = archive_dir
+        calls["failed_dir"] = failed_dir
 
     monkeypatch.setattr(watcher, "process_file", fake_process)
     monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
 
-    handler = watcher.InboxHandler("/out", "/arch")
+    handler = watcher.InboxHandler("/out", "/arch", "/failed")
     handler.on_created(FileCreatedEvent("/raw/note.txt"))
 
     assert calls["filepath"] == "/raw/note.txt"
     assert calls["processed_dir"] == "/out"
     assert calls["archive_dir"] == os.path.abspath("/arch")
+    assert calls["failed_dir"] == "/failed"
 
 
 def test_inbox_handler_processes_moved_file(monkeypatch):
@@ -223,20 +228,22 @@ def test_inbox_handler_processes_moved_file(monkeypatch):
 
     calls: dict[str, Any] = {}
 
-    def fake_process(filepath, *, processed_dir=None, archive_dir=None):
+    def fake_process(filepath, *, processed_dir=None, archive_dir=None, failed_dir=None):
         calls["filepath"] = filepath
         calls["processed_dir"] = processed_dir
         calls["archive_dir"] = archive_dir
+        calls["failed_dir"] = failed_dir
 
     monkeypatch.setattr(watcher, "process_file", fake_process)
     monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
 
-    handler = watcher.InboxHandler("/out", "/arch")
+    handler = watcher.InboxHandler("/out", "/arch", "/failed")
     handler.on_moved(FileMovedEvent("/tmp/.syncthing.note.txt.tmp", "/raw/note.txt"))
 
     assert calls["filepath"] == os.path.abspath("/raw/note.txt")
     assert calls["processed_dir"] == "/out"
     assert calls["archive_dir"] == os.path.abspath("/arch")
+    assert calls["failed_dir"] == "/failed"
 
 
 def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
@@ -253,7 +260,9 @@ def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
 
-    handler = watcher.InboxHandler(str(tmp_path / "out"), str(tmp_path / "arch"))
+    handler = watcher.InboxHandler(
+        str(tmp_path / "out"), str(tmp_path / "arch"), str(tmp_path / "failed")
+    )
     handler.rescan(str(raw_dir))
 
     assert processed == [os.path.abspath(str(raw_dir / "keep.txt"))]
@@ -303,3 +312,120 @@ def test_normalize_domain():
     assert watcher.normalize_domain("Lucke Capital Services") == "lucke-capital-services"
     assert watcher.normalize_domain("Ernährung") == "ernährung"
     assert watcher.normalize_domain("   ") == "inbox"
+
+
+def _mk_pipeline_dirs(tmp_path: Path) -> dict[str, Path]:
+    """Create raw/processed/archive/failed dirs and return them."""
+    dirs = {name: tmp_path / name for name in ("raw", "processed", "archive", "failed")}
+    for path in dirs.values():
+        path.mkdir()
+    return dirs
+
+
+def test_process_file_retries_transient_then_succeeds(tmp_path, monkeypatch):
+    """A transient Gemini failure is retried; the note is written once it succeeds."""
+    dirs = _mk_pipeline_dirs(tmp_path)
+    txt_path = dirs["raw"] / "note.txt"
+    txt_path.write_text("Vorlesung AVL-Bäume und Komplexitätsklassen.", encoding="utf-8")
+
+    attempts = {"n": 0}
+
+    def flaky_client(api_key: str | None = None) -> MagicMock:
+        client = MagicMock()
+
+        def generate_content(model: str, contents: Any, config: Any = None) -> MockResponse:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise requests.exceptions.ConnectionError("transient blip")
+            return MockResponse(
+                json.dumps(
+                    {
+                        "titel": "Titel",
+                        "domain": "lernen",
+                        "tags": ["a"],
+                        "summary": "s",
+                        "questions": "q",
+                        "action_items": ["x"],
+                    }
+                )
+            )
+
+        client.models.generate_content = generate_content
+        return client
+
+    # tenacity attaches the Retrying instance as .retry at decoration time.
+    monkeypatch.setattr(watcher._generate_note_json.retry, "sleep", lambda _s: None)  # type: ignore[attr-defined]
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    with (
+        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("google.genai.Client", side_effect=flaky_client),
+    ):
+        watcher.process_file(
+            str(txt_path),
+            processed_dir=str(dirs["processed"]),
+            archive_dir=str(dirs["archive"]),
+            failed_dir=str(dirs["failed"]),
+        )
+
+    assert attempts["n"] == 3
+    assert len(list(dirs["processed"].iterdir())) == 1
+    assert list(dirs["failed"].iterdir()) == []
+    assert any(f.name.startswith("note") for f in dirs["archive"].iterdir())
+
+
+def test_process_file_dead_letters_permanent_failure(tmp_path, monkeypatch):
+    """A non-transient Gemini error moves the raw file to the failed dir with a sidecar."""
+    dirs = _mk_pipeline_dirs(tmp_path)
+    txt_path = dirs["raw"] / "note.txt"
+    txt_path.write_text("Irgendein Inhalt.", encoding="utf-8")
+
+    def broken_client(api_key: str | None = None) -> MagicMock:
+        client = MagicMock()
+
+        def generate_content(model: str, contents: Any, config: Any = None) -> MockResponse:
+            raise ValueError("permanent 400 bad request")
+
+        client.models.generate_content = generate_content
+        return client
+
+    # tenacity attaches the Retrying instance as .retry at decoration time.
+    monkeypatch.setattr(watcher._generate_note_json.retry, "sleep", lambda _s: None)  # type: ignore[attr-defined]
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    with (
+        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("google.genai.Client", side_effect=broken_client),
+    ):
+        watcher.process_file(
+            str(txt_path),
+            processed_dir=str(dirs["processed"]),
+            archive_dir=str(dirs["archive"]),
+            failed_dir=str(dirs["failed"]),
+        )
+
+    assert not txt_path.exists()
+    assert (dirs["failed"] / "note.txt").exists()
+    sidecar = (dirs["failed"] / "note.txt.error.txt").read_text(encoding="utf-8")
+    assert "gemini_failed" in sidecar
+    assert list(dirs["processed"].iterdir()) == []
+
+
+def test_process_file_dead_letters_empty_text(tmp_path, monkeypatch):
+    """A file with no extractable text is dead-lettered without calling Gemini."""
+    dirs = _mk_pipeline_dirs(tmp_path)
+    txt_path = dirs["raw"] / "empty.txt"
+    txt_path.write_text("   \n\n", encoding="utf-8")
+
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    with patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"):
+        watcher.process_file(
+            str(txt_path),
+            processed_dir=str(dirs["processed"]),
+            archive_dir=str(dirs["archive"]),
+            failed_dir=str(dirs["failed"]),
+        )
+
+    assert not txt_path.exists()
+    assert (dirs["failed"] / "empty.txt").exists()
+    sidecar = (dirs["failed"] / "empty.txt.error.txt").read_text(encoding="utf-8")
+    assert "empty_text" in sidecar
+    assert list(dirs["processed"].iterdir()) == []

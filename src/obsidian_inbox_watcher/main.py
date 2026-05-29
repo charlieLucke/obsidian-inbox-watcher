@@ -17,6 +17,7 @@ import docx
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
@@ -172,20 +173,143 @@ def wait_for_file_to_be_written(
     return False
 
 
+def _is_transient(exc: BaseException) -> bool:
+    """Return True for errors worth retrying (network blips, 429, HTTP 5xx)."""
+    if isinstance(exc, requests.exceptions.Timeout | requests.exceptions.ConnectionError):
+        return True
+    if isinstance(exc, requests.exceptions.HTTPError):
+        resp = exc.response
+        return resp is not None and (resp.status_code == 429 or 500 <= resp.status_code < 600)
+    from google.genai import errors as genai_errors
+
+    if isinstance(exc, genai_errors.APIError):
+        code = exc.code
+        return code == 429 or 500 <= code < 600
+    return False
+
+
+# Bounded exponential backoff for transient remote failures; permanent errors
+# (bad JSON, empty text, programming errors) fall through immediately.
+_retryable = retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, max=30),
+    retry=retry_if_exception(_is_transient),
+    reraise=True,
+)
+
+
+@_retryable
+def _http_get(url: str, headers: dict[str, str]) -> requests.Response:
+    """GET a URL, retrying transient failures and raising on HTTP error status."""
+    res = requests.get(url, headers=headers, timeout=15)
+    res.raise_for_status()
+    return res
+
+
+@_retryable
+def _generate_note_json(api_key: str, prompt: str) -> str:
+    """Call Gemini and return the raw JSON text, retrying transient failures."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+    )
+    if not response.text:
+        raise ValueError("Empty response from Gemini API")
+    return str(response.text)
+
+
+def _dead_letter(filepath: str, failed_dir: str, reason: str, detail: str) -> None:
+    """Move an unprocessable raw file out of the inbox and write an error sidecar.
+
+    The raw file goes to ``failed_dir`` (a timestamp suffix avoids clobbering an
+    existing same-named file) with a ``<name>.error.txt`` sidecar holding the
+    timestamp, reason and a short detail — never a full traceback (that goes to
+    the journal via ``logger.exception``).
+    """
+    os.makedirs(failed_dir, exist_ok=True)
+    base_name = os.path.basename(filepath)
+    dest = os.path.join(failed_dir, base_name)
+    if os.path.exists(dest):
+        name_part, ext_part = os.path.splitext(base_name)
+        timestamp = datetime.datetime.now().strftime("%H%M%S")
+        dest = os.path.join(failed_dir, f"{name_part}_{timestamp}{ext_part}")
+    shutil.move(filepath, dest)
+    sidecar = f"{dest}.error.txt"
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    with open(sidecar, "w", encoding="utf-8") as f:
+        f.write(f"timestamp: {now}\nreason: {reason}\ndetail: {detail}\n")
+    logger.warning("Dead-lettered %s -> %s (%s)", filepath, dest, reason)
+
+
+def _extract_text(filepath: str, ext: str) -> tuple[str, str]:
+    """Extract text from a supported input file.
+
+    Returns a ``(text_content, source_origin)`` tuple. ``source_origin`` is the
+    file path for local files and the crawled URL for ``.url`` shortcuts. Raises
+    on extraction failure (the caller dead-letters the file).
+    """
+    if ext == ".txt":
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
+            return f.read(), filepath
+    if ext == ".pdf":
+        reader = PdfReader(filepath)
+        text_list = [t for page in reader.pages if (t := page.extract_text())]
+        return "\n".join(text_list), filepath
+    if ext == ".docx":
+        document = docx.Document(filepath)
+        return "\n".join(p.text for p in document.paragraphs), filepath
+    if ext == ".url":
+        url = None
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.strip().startswith("URL="):
+                    url = line.split("URL=", 1)[1].strip()
+                    break
+        if not url:
+            raise ValueError(f"No URL found in .url file: {filepath}")
+        logger.info("Extracted URL from shortcut: %s. Fetching page text...", url)
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+        }
+        res = _http_get(url, headers)
+        soup = BeautifulSoup(res.text, "html.parser")
+        for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            element.decompose()
+        raw_text = soup.get_text(separator="\n")
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        return "\n".join(lines), url
+    raise ValueError(f"Unsupported file format: {ext}")
+
+
 def process_file(
     filepath: str,
     *,
     processed_dir: str | None = None,
     archive_dir: str | None = None,
+    failed_dir: str | None = None,
 ) -> None:
-    """Extract content from file, process via Gemini, and generate Obsidian markdown note.
+    """Extract a file's content, process it via Gemini, and write an Obsidian note.
+
+    On success the original is archived. Unprocessable inputs (extraction
+    failure, exhausted transient retries, invalid JSON, empty text, unsupported
+    format) are moved to ``failed_dir`` with an ``.error.txt`` sidecar so they
+    leave the inbox instead of being retried on every restart. A missing API
+    key is a config issue and leaves the file in place for a later run.
 
     Args:
         filepath: Path to the input file.
         processed_dir: Override for the output notes directory.
         archive_dir: Override for the archive directory.
+        failed_dir: Override for the dead-letter directory.
     """
-    # Ensure filepath is absolute
     filepath = os.path.abspath(filepath)
     if not os.path.exists(filepath):
         logger.warning("File not found: %s", filepath)
@@ -199,79 +323,43 @@ def process_file(
 
     logger.info("Starting processing for: %s", filepath)
 
+    if processed_dir is None:
+        processed_dir = os.path.expanduser("~/0_Pipeline/Out")
+    if archive_dir is None:
+        archive_dir = os.path.expanduser("~/0_Pipeline/Archive")
+    if failed_dir is None:
+        failed_dir = os.path.expanduser("~/0_Pipeline/Failed")
+
     ext = os.path.splitext(filepath)[1].lower()
-    text_content = ""
-    source_origin = filepath
+    if ext not in _SUPPORTED_EXTENSIONS:
+        logger.warning("Unsupported file format: %s", ext)
+        _dead_letter(filepath, failed_dir, "unsupported_format", f"extension {ext or '(none)'}")
+        return
+
+    # A missing key is a configuration problem, not a poison file: leave the raw
+    # file in the inbox so it is processed once the key is set.
+    api_key = load_api_key()
+    if not api_key:
+        logger.error(
+            "GEMINI_API_KEY is missing or set to placeholder. "
+            "Please configure your API key in ~/.config/vault_watcher/env"
+        )
+        return
 
     try:
-        # Step 1: Content Extraction
-        if ext == ".txt":
-            with open(filepath, encoding="utf-8", errors="ignore") as f:
-                text_content = f.read()
-        elif ext == ".pdf":
-            reader = PdfReader(filepath)
-            text_list = []
-            for page in reader.pages:
-                t = page.extract_text()
-                if t:
-                    text_list.append(t)
-            text_content = "\n".join(text_list)
-        elif ext == ".docx":
-            doc = docx.Document(filepath)
-            text_content = "\n".join([p.text for p in doc.paragraphs])
-        elif ext == ".url":
-            url = None
-            with open(filepath, encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    if line.strip().startswith("URL="):
-                        url = line.split("URL=", 1)[1].strip()
-                        break
-            if not url:
-                logger.error("No URL found in .url file: %s", filepath)
-                return
-
-            source_origin = url
-            logger.info("Extracted URL from shortcut: %s. Fetching page text...", url)
-
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-            }
-            res = requests.get(url, headers=headers, timeout=15)
-            res.raise_for_status()
-
-            soup = BeautifulSoup(res.text, "html.parser")
-            for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
-                element.decompose()
-
-            raw_text = soup.get_text(separator="\n")
-            lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-            text_content = "\n".join(lines)
-        else:
-            logger.warning("Unsupported file format: %s", ext)
+        try:
+            text_content, source_origin = _extract_text(filepath, ext)
+        except Exception as e:
+            logger.exception("Text extraction failed for %s", filepath)
+            _dead_letter(filepath, failed_dir, "extraction_failed", f"{type(e).__name__}: {e}")
             return
 
         if not text_content.strip():
             logger.warning("Extracted text content is empty for: %s", filepath)
+            _dead_letter(filepath, failed_dir, "empty_text", "no extractable text")
             return
 
-        # Step 2: Load API Key & Configure Gemini client
-        api_key = load_api_key()
-        if not api_key:
-            logger.error(
-                "GEMINI_API_KEY is missing or set to placeholder. "
-                "Please configure your API key in ~/.config/vault_watcher/env"
-            )
-            return
-
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=api_key)
-
-        # Step 3: LLM Process Prompt
+        # LLM process prompt
         known_domains = get_known_domains()
         domains_block = "\n".join(f"- {d}" for d in known_domains)
         prompt = f"""
@@ -304,18 +392,20 @@ Textinhalt, der analysiert werden soll:
 """
 
         logger.info("Querying Gemini API (gemini-2.5-flash)...")
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-
-        # Step 4: Parse Results
-        if not response.text:
-            logger.error("Empty response from Gemini API")
+        try:
+            response_text = _generate_note_json(api_key, prompt)
+        except Exception as e:
+            logger.exception("Gemini API call failed for %s", filepath)
+            _dead_letter(filepath, failed_dir, "gemini_failed", f"{type(e).__name__}: {e}")
             return
 
-        result: dict[str, Any] = json.loads(response.text)
+        # Step 4: Parse Results
+        try:
+            result: dict[str, Any] = json.loads(response_text)
+        except Exception as e:
+            logger.exception("Gemini returned invalid JSON for %s", filepath)
+            _dead_letter(filepath, failed_dir, "invalid_json", f"{type(e).__name__}: {e}")
+            return
         domain = normalize_domain(str(result.get("domain") or ""))
         logger.info(
             "Gemini API returned valid response. Title: '%s', Domain: '%s'",
@@ -366,8 +456,6 @@ ai_processed: true
         safe_title = re.sub(r"\s+", "_", safe_title)
         filename = f"{created_date}_{safe_title}.md"
 
-        if processed_dir is None:
-            processed_dir = os.path.expanduser("~/0_Pipeline/Out")
         out_filepath = os.path.join(processed_dir, filename)
 
         with open(out_filepath, "w", encoding="utf-8") as f:
@@ -375,8 +463,6 @@ ai_processed: true
         logger.info("Successfully processed and saved note to: %s", out_filepath)
 
         # Step 6: Move original file to archive directory
-        if archive_dir is None:
-            archive_dir = os.path.expanduser("~/0_Pipeline/Archive")
         base_name = os.path.basename(filepath)
         archive_filepath = os.path.join(archive_dir, base_name)
 
@@ -390,16 +476,19 @@ ai_processed: true
         logger.info("Successfully archived raw source to: %s", archive_filepath)
 
     except Exception as e:
-        logger.exception("Error processing file %s: %s", filepath, e)
+        logger.exception("Unexpected error processing %s", filepath)
+        if os.path.exists(filepath):
+            _dead_letter(filepath, failed_dir, "unexpected_error", f"{type(e).__name__}: {e}")
 
 
 class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
     """Event handler for monitoring files in raw inbox."""
 
-    def __init__(self, processed_dir: str, archive_dir: str) -> None:
+    def __init__(self, processed_dir: str, archive_dir: str, failed_dir: str) -> None:
         super().__init__()
         self._processed_dir = processed_dir
         self._archive_dir = os.path.abspath(archive_dir)
+        self._failed_dir = failed_dir
         # Paths currently being processed, guarding against the same file being
         # picked up twice when an event and the safety-net rescan race.
         self._inflight: set[str] = set()
@@ -429,6 +518,7 @@ class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
                 abs_path,
                 processed_dir=self._processed_dir,
                 archive_dir=self._archive_dir,
+                failed_dir=self._failed_dir,
             )
         finally:
             with self._inflight_lock:
@@ -475,7 +565,9 @@ class InboxHandler(FileSystemEventHandler):  # type: ignore[misc]
                 self._maybe_process(path)
 
 
-def process_existing_files(raw_dir: str, processed_dir: str, archive_dir: str) -> None:
+def process_existing_files(
+    raw_dir: str, processed_dir: str, archive_dir: str, failed_dir: str
+) -> None:
     """Scan and process files that already exist in the raw directory."""
     logger.info("Scanning for existing un-processed raw files in %s...", raw_dir)
     try:
@@ -490,7 +582,12 @@ def process_existing_files(raw_dir: str, processed_dir: str, archive_dir: str) -
         ext = os.path.splitext(entry)[1].lower()
         if ext in _SUPPORTED_EXTENSIONS:
             logger.info("Found existing file at startup: %s", filepath)
-            process_file(filepath, processed_dir=processed_dir, archive_dir=archive_dir)
+            process_file(
+                filepath,
+                processed_dir=processed_dir,
+                archive_dir=archive_dir,
+                failed_dir=failed_dir,
+            )
 
 
 def _rescan_loop(handler: InboxHandler, raw_dir: str, stop_event: threading.Event) -> None:
@@ -515,20 +612,21 @@ def main() -> None:
     raw_dir = resolve_dir("VAULT_WATCHER_RAW_DIR", "~/0_Pipeline/In")
     processed_dir = resolve_dir("VAULT_WATCHER_PROCESSED_DIR", "~/0_Pipeline/Out")
     archive_dir = resolve_dir("VAULT_WATCHER_ARCHIVE_DIR", "~/0_Pipeline/Archive")
+    failed_dir = resolve_dir("VAULT_WATCHER_FAILED_DIR", "~/0_Pipeline/Failed")
     config_dir = os.path.expanduser("~/.config/vault_watcher")
 
     # Ensure all required directories exist (safe on first run / new PC)
-    for directory in [raw_dir, processed_dir, archive_dir, config_dir]:
+    for directory in [raw_dir, processed_dir, archive_dir, failed_dir, config_dir]:
         os.makedirs(directory, exist_ok=True)
 
     logger.info("Starting Obsidian Inbox Watcher service.")
     logger.info("Monitoring %s  ->  notes: %s", raw_dir, processed_dir)
 
     # Process existing files first (for robustness on reboot)
-    process_existing_files(raw_dir, processed_dir, archive_dir)
+    process_existing_files(raw_dir, processed_dir, archive_dir, failed_dir)
 
     # Set up watchdog observer (polling on /mnt drive mounts; inotify elsewhere)
-    event_handler = InboxHandler(processed_dir, archive_dir)
+    event_handler = InboxHandler(processed_dir, archive_dir, failed_dir)
     observer = select_observer(raw_dir)
     observer.schedule(event_handler, path=raw_dir, recursive=False)
     observer.start()

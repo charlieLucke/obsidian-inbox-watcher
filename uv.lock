@@ -715,6 +715,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "python-docx" },
     { name = "requests" },
+    { name = "tenacity" },
     { name = "watchdog" },
 ]
 
@@ -734,6 +735,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=6.11.0" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "requests", specifier = ">=2.31.0" },
+    { name = "tenacity", specifier = ">=9.1.4" },
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
