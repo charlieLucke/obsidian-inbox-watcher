@@ -289,6 +289,25 @@ def _extract_text(filepath: str, ext: str) -> tuple[str, str]:
     raise ValueError(f"Unsupported file format: {ext}")
 
 
+def unique_output_path(directory: str, filename: str) -> str:
+    """Return a path in ``directory`` for ``filename`` that does not yet exist.
+
+    Two different inputs can yield the same title — and therefore the same note
+    name — on the same day. Rather than silently overwrite an existing note,
+    append ``_v2``, ``_v3``, ... before the extension until the path is free.
+    """
+    candidate = os.path.join(directory, filename)
+    if not os.path.exists(candidate):
+        return candidate
+    stem, ext = os.path.splitext(filename)
+    version = 2
+    while True:
+        candidate = os.path.join(directory, f"{stem}_v{version}{ext}")
+        if not os.path.exists(candidate):
+            return candidate
+        version += 1
+
+
 def process_file(
     filepath: str,
     *,
@@ -456,7 +475,7 @@ ai_processed: true
         safe_title = re.sub(r"\s+", "_", safe_title)
         filename = f"{created_date}_{safe_title}.md"
 
-        out_filepath = os.path.join(processed_dir, filename)
+        out_filepath = unique_output_path(processed_dir, filename)
 
         with open(out_filepath, "w", encoding="utf-8") as f:
             f.write(markdown_content)

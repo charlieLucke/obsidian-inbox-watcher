@@ -314,6 +314,23 @@ def test_normalize_domain():
     assert watcher.normalize_domain("   ") == "inbox"
 
 
+def test_unique_output_path_appends_version_suffix(tmp_path):
+    """A clashing note name gets a _v2/_v3 suffix instead of overwriting."""
+    directory = str(tmp_path)
+
+    first = watcher.unique_output_path(directory, "2026-05-29_Note.md")
+    assert first == os.path.join(directory, "2026-05-29_Note.md")
+
+    # Once the file exists, the next call must not return the same path.
+    Path(first).write_text("x", encoding="utf-8")
+    second = watcher.unique_output_path(directory, "2026-05-29_Note.md")
+    assert second == os.path.join(directory, "2026-05-29_Note_v2.md")
+
+    Path(second).write_text("x", encoding="utf-8")
+    third = watcher.unique_output_path(directory, "2026-05-29_Note.md")
+    assert third == os.path.join(directory, "2026-05-29_Note_v3.md")
+
+
 def _mk_pipeline_dirs(tmp_path: Path) -> dict[str, Path]:
     """Create raw/processed/archive/failed dirs and return them."""
     dirs = {name: tmp_path / name for name in ("raw", "processed", "archive", "failed")}

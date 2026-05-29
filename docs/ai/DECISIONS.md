@@ -68,3 +68,9 @@
 **Reasoning:** Before this, a single transient API blip dropped a file silently, and a permanently-bad file (corrupt PDF, 403 URL) was retried on every restart, blocking the queue and spamming the journal. Dead-lettering gets poison files out of the hot path while preserving them for inspection; bounded backoff rides out real outages without hammering the API.
 **Alternatives considered:** Retrying everything (turns a permanent 400 into 5 slow failures); deleting unprocessable files (loses the original + the reason); an in-memory retry counter (lost across restarts, unlike a filesystem move).
 **Consequences:** `InboxHandler`, `process_existing_files`, and `process_file` all take a `failed_dir`; `main()` resolves and pre-creates it. The sidecar holds only timestamp/reason/short-detail — full tracebacks go to the journal via `logger.exception`. Operators must occasionally drain `failed_dir`. tenacity is a new dependency.
+
+## 2026-05-29: Never overwrite an existing processed note
+**Decision:** Route the output path through `unique_output_path(directory, filename)`, which appends `_v2`, `_v3`, ... before the extension when the target already exists.
+**Reasoning:** The note name is `{date}_{title}.md`, and Gemini can produce the same title for two different inputs on the same day. The old code opened that path with `"w"`, silently destroying the earlier note (and its source was already archived, so it was unrecoverable).
+**Alternatives considered:** Hashing the content into the name (ugly, unstable across re-runs); appending a timestamp always (noisy for the common no-collision case); skipping the write on collision (drops data — the opposite failure).
+**Consequences:** Collisions now create sibling `_v2` notes the user can merge or delete. Archive collision handling (timestamp suffix on the raw file) is unchanged.
