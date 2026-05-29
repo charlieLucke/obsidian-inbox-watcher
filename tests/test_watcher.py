@@ -314,6 +314,72 @@ def test_normalize_domain():
     assert watcher.normalize_domain("   ") == "inbox"
 
 
+def test_get_max_chars_default(monkeypatch):
+    """Without the env var, the default prompt char limit is returned."""
+    monkeypatch.delenv("VAULT_WATCHER_MAX_CHARS", raising=False)
+    assert watcher.get_max_chars() == 200_000
+
+
+def test_get_max_chars_env_override(monkeypatch):
+    """A positive env value overrides; non-numeric or non-positive falls back."""
+    monkeypatch.setenv("VAULT_WATCHER_MAX_CHARS", "5000")
+    assert watcher.get_max_chars() == 5000
+    monkeypatch.setenv("VAULT_WATCHER_MAX_CHARS", "not-a-number")
+    assert watcher.get_max_chars() == 200_000
+    monkeypatch.setenv("VAULT_WATCHER_MAX_CHARS", "0")
+    assert watcher.get_max_chars() == 200_000
+
+
+def test_process_file_truncates_and_warns(tmp_path, monkeypatch, caplog):
+    """Over-long text is truncated to the limit and a warning is logged."""
+    dirs = _mk_pipeline_dirs(tmp_path)
+    txt_path = dirs["raw"] / "long.txt"
+    txt_path.write_text("A" * 50, encoding="utf-8")
+    monkeypatch.setenv("VAULT_WATCHER_MAX_CHARS", "10")
+
+    seen: dict[str, str] = {}
+
+    def capture_client(api_key: str | None = None) -> MagicMock:
+        client = MagicMock()
+
+        def generate_content(model: str, contents: Any, config: Any = None) -> MockResponse:
+            seen["contents"] = str(contents)
+            return MockResponse(
+                json.dumps(
+                    {
+                        "titel": "T",
+                        "domain": "system",
+                        "tags": ["a"],
+                        "summary": "s",
+                        "questions": "q",
+                        "action_items": ["x"],
+                    }
+                )
+            )
+
+        client.models.generate_content = generate_content
+        return client
+
+    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    with (
+        caplog.at_level(logging.WARNING),
+        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("google.genai.Client", side_effect=capture_client),
+    ):
+        watcher.process_file(
+            str(txt_path),
+            processed_dir=str(dirs["processed"]),
+            archive_dir=str(dirs["archive"]),
+            failed_dir=str(dirs["failed"]),
+        )
+
+    # The prompt body must carry at most the 10-char limit, not all 50 chars.
+    body = seen["contents"].split("Textinhalt, der analysiert werden soll:")[-1]
+    assert "A" * 10 in body
+    assert "A" * 11 not in body
+    assert any("Truncating extracted text" in r.message for r in caplog.records)
+
+
 def test_unique_output_path_appends_version_suffix(tmp_path):
     """A clashing note name gets a _v2/_v3 suffix instead of overwriting."""
     directory = str(tmp_path)

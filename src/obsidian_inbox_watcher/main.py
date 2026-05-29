@@ -131,6 +131,22 @@ def normalize_domain(value: str) -> str:
     return slug.strip("-") or "inbox"
 
 
+# Maximum characters of extracted text sent to Gemini. Longer inputs are
+# truncated: the prompt budget is finite and the most relevant signal in a
+# captured document is almost always near the top.
+_DEFAULT_MAX_CHARS = 200_000
+
+
+def get_max_chars() -> int:
+    """Return the prompt char limit (``VAULT_WATCHER_MAX_CHARS``, positive int)."""
+    raw = os.environ.get("VAULT_WATCHER_MAX_CHARS", "")
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_MAX_CHARS
+    return value if value > 0 else _DEFAULT_MAX_CHARS
+
+
 def load_api_key() -> str | None:
     """Load the Gemini API key from environment or config file."""
     # 1. Try environment
@@ -378,6 +394,16 @@ def process_file(
             _dead_letter(filepath, failed_dir, "empty_text", "no extractable text")
             return
 
+        max_chars = get_max_chars()
+        if len(text_content) > max_chars:
+            logger.warning(
+                "Truncating extracted text for %s from %d to %d chars",
+                filepath,
+                len(text_content),
+                max_chars,
+            )
+            text_content = text_content[:max_chars]
+
         # LLM process prompt
         known_domains = get_known_domains()
         domains_block = "\n".join(f"- {d}" for d in known_domains)
@@ -407,7 +433,7 @@ JSON-Struktur:
 }}
 
 Textinhalt, der analysiert werden soll:
-{text_content[:20000]}
+{text_content}
 """
 
         logger.info("Querying Gemini API (gemini-2.5-flash)...")

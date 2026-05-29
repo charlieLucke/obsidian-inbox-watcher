@@ -74,3 +74,9 @@
 **Reasoning:** The note name is `{date}_{title}.md`, and Gemini can produce the same title for two different inputs on the same day. The old code opened that path with `"w"`, silently destroying the earlier note (and its source was already archived, so it was unrecoverable).
 **Alternatives considered:** Hashing the content into the name (ugly, unstable across re-runs); appending a timestamp always (noisy for the common no-collision case); skipping the write on collision (drops data — the opposite failure).
 **Consequences:** Collisions now create sibling `_v2` notes the user can merge or delete. Archive collision handling (timestamp suffix on the raw file) is unchanged.
+
+## 2026-05-29: Make the prompt length limit configurable and raise the default
+**Decision:** Replace the hardcoded `text_content[:20000]` slice with `get_max_chars()` (`VAULT_WATCHER_MAX_CHARS`, default `200_000`), applied before building the prompt, and log a `WARNING` whenever the text is actually truncated.
+**Reasoning:** 20k chars silently dropped most of any real PDF/article, so summaries were built from the first few pages only — with no signal that anything was lost. gemini-2.5-flash has a very large context window, so 200k is safe and captures whole documents; the env override lets the hub tune it down if cost matters. Logging the truncation makes the lossy case visible instead of silent.
+**Alternatives considered:** No limit at all (unbounded prompt cost / token-limit errors on pathological inputs); chunk-and-map-reduce summarization (much more complex, deferred — see IDEAS); keeping 20k (too small, the original bug).
+**Consequences:** Larger prompts mean higher per-file token cost at the default; operators who care can lower `VAULT_WATCHER_MAX_CHARS`. Non-numeric or non-positive values fall back to the default rather than erroring.
