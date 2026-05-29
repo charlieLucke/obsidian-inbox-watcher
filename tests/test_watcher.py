@@ -259,10 +259,27 @@ def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
     assert processed == [os.path.abspath(str(raw_dir / "keep.txt"))]
 
 
-def test_select_observer_polling_for_mnt():
-    """Windows drive mounts (/mnt/...) need the polling observer; native otherwise."""
+def test_select_observer_polling_for_translated_fs(monkeypatch):
+    """Translated/network filesystems (drvfs/9p/cifs/nfs) use the polling observer."""
     from watchdog.observers.polling import PollingObserver
 
+    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: "9p")
+    assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
+
+
+def test_select_observer_inotify_for_native_fs(monkeypatch):
+    """Native local filesystems (ext4) use the inotify observer."""
+    from watchdog.observers.polling import PollingObserver
+
+    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: "ext4")
+    assert not isinstance(watcher.select_observer("/srv/cloud/inbox/raw"), PollingObserver)
+
+
+def test_select_observer_falls_back_to_path_heuristic(monkeypatch):
+    """When the filesystem type is unknown, fall back to the /mnt path heuristic."""
+    from watchdog.observers.polling import PollingObserver
+
+    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: None)
     assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
     assert not isinstance(watcher.select_observer("/home/charl/0_Pipeline/In"), PollingObserver)
 

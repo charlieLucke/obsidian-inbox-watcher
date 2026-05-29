@@ -59,14 +59,50 @@ def resolve_dir(env_var: str, default: str) -> str:
     return os.path.expanduser(os.environ.get(env_var) or default)
 
 
-def select_observer(watch_dir: str) -> BaseObserver:
-    """Pick a watchdog observer for the watched directory.
+# Filesystems where inotify is unreliable or unsupported, so watchdog must poll:
+# the WSL Windows-drive mount (drvfs/9p) and network shares.
+_POLLING_FS_TYPES = frozenset({"drvfs", "9p", "cifs", "smbfs", "nfs", "nfs4", "fuse.sshfs"})
 
-    inotify events are not delivered on the Windows drive mount (drvfs), so a
-    raw inbox under ``/mnt/...`` needs the polling observer; native inotify is
-    used everywhere else.
+
+def _filesystem_type(path: str) -> str | None:
+    """Return the filesystem type backing ``path`` via /proc/mounts (Linux only).
+
+    Matches the longest mount point that is a prefix of ``path``. Returns None
+    when the type cannot be determined (e.g. /proc/mounts unreadable).
     """
-    if watch_dir.startswith("/mnt/"):
+    abs_path = os.path.abspath(path)
+    best_mount = ""
+    best_fstype: str | None = None
+    try:
+        with open("/proc/mounts", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mount_point, fstype = parts[1], parts[2]
+                is_prefix = abs_path == mount_point or abs_path.startswith(
+                    mount_point.rstrip("/") + "/"
+                )
+                if is_prefix and len(mount_point) >= len(best_mount):
+                    best_mount = mount_point
+                    best_fstype = fstype
+    except OSError:
+        return None
+    return best_fstype
+
+
+def select_observer(watch_dir: str) -> BaseObserver:
+    """Pick a watchdog observer based on the watched directory's filesystem.
+
+    inotify is not delivered on the WSL Windows-drive mount (drvfs/9p) and is
+    unreliable on network shares, so those use the polling observer; native
+    local filesystems (ext4, etc.) use inotify. Falls back to the legacy
+    ``/mnt/`` path heuristic when the filesystem type cannot be read.
+    """
+    fstype = _filesystem_type(watch_dir)
+    if fstype is None:
+        return PollingObserver() if watch_dir.startswith("/mnt/") else Observer()
+    if fstype in _POLLING_FS_TYPES:
         return PollingObserver()
     return Observer()
 
