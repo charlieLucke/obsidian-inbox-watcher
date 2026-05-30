@@ -4,33 +4,33 @@
 
 ## Goal
 
-Set up the watcher on the Haupt-PC (WSL2) and wire it into the Titan RAG system.
-Done — the service is installed and running; only the API key is pending.
+Harden the watcher and prepare its migration to the always-on Mini-PC hub, per
+`docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`. Code work done.
 
 ## Completed Steps
-- [x] Cloned to `~/projects/obsidian-inbox-watcher`, `uv sync`
-- [x] Made the working dirs env-configurable (`VAULT_WATCHER_*`) + `load_env_file()`
-- [x] Created `~/.config/vault_watcher/env` (key placeholder + dir overrides, chmod 600)
-- [x] Created `~/0_Pipeline/{In,Archive}` and `/mnt/f/vault/notes/inbox`
-- [x] Fixed `deploy/obsidian-inbox-watcher.service` paths (user `charl`); linked + enabled + started
-- [x] Verified detection end-to-end (drops are detected; stops cleanly at the missing-key check)
-- [x] Updated docs (README, CONTEXT, ARCHITECTURE, DECISIONS, deploy/README)
-- [x] Moved the raw inbox to the Windows drive `F:\0_Pipeline\In`
-      (`/mnt/f/0_Pipeline/In`) + archive `/mnt/f/0_Pipeline/Archive`; added
-      `select_observer()` (polling on `/mnt`, inotify elsewhere) — drop
-      detection verified
-- [x] Aligned frontmatter with Titan: required `domain:` field, seed domain
-      list (`VAULT_WATCHER_DOMAINS`) passed to Gemini, new domains allowed,
-      `normalize_domain()` for consistent Qdrant filtering
+- [x] **WI-1** — dispatch `on_moved` as well as `on_created` (Syncthing delivers
+      via temp-write-then-rename); refactored into `_maybe_process` with an
+      in-flight guard; added a 60 s safety-net rescan thread.
+- [x] **WI-1b** — `select_observer()` now picks polling vs. inotify by *filesystem
+      type* (`/proc/mounts`), not a `/mnt` path prefix (DECISIONS entry).
+- [x] **WI-2** — bounded tenacity retry for transient Gemini/URL failures; poison
+      inputs dead-lettered to `VAULT_WATCHER_FAILED_DIR` with `.error.txt` sidecar.
+- [x] **WI-3** — `unique_output_path()` (`_v2`/`_v3`) never overwrites a note.
+- [x] **WI-5** — `VAULT_WATCHER_MAX_CHARS` (default 200k) + logged truncation.
+- [x] **WI-7** — hub systemd unit + `.env.example` rewrite + docs (README,
+      deploy/README, CONTEXT, ARCHITECTURE, DECISIONS).
+- [x] `make check` green; 21 tests pass. Each WI committed separately.
 
-## Next Steps
-- [ ] Paste the real `GEMINI_API_KEY` into `~/.config/vault_watcher/env`, then
-      `systemctl --user restart obsidian-inbox-watcher`
-- [ ] Drop a test PDF in `F:\0_Pipeline\In` and confirm a note appears in
-      `/mnt/f/vault/notes/inbox` and gets ingested by brain-watcher → Titan
+## Deferred (captured in IDEAS.md)
+- **WI-4** crash-safe `_processing/<uuid>/` claim (reshapes ordering/idempotency).
+- **WI-6** send PDFs to Gemini multimodally (handles scans; own plan).
 
-## Blockers
-- API key not yet set (placeholder in place); processing is a no-op until then.
+## Next Steps (operator, on the hub)
+- [ ] Mount the SSD at `/srv/cloud`, create the Syncthing folder boundaries, write
+      `/home/charlie/.config/vault_watcher/env`, link + enable the `.hub.service`.
+- [ ] Paste the real `GEMINI_API_KEY`; drop a test file and confirm a note flows
+      Syncthing → workstation vault → brain-watcher → Titan.
 
 ## Notes
 - Tests mock the Gemini API, so `make check` runs offline.
+- A missing API key leaves the raw file in place (config issue, not poison).
