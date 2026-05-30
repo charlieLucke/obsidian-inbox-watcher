@@ -255,9 +255,7 @@ def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
     (raw_dir / "sub").mkdir()
 
     processed: list[str] = []
-    monkeypatch.setattr(
-        watcher, "process_file", lambda fp, **_kw: processed.append(fp)
-    )
+    monkeypatch.setattr(watcher, "process_file", lambda fp, **_kw: processed.append(fp))
     monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
 
     handler = watcher.InboxHandler(

@@ -17,8 +17,9 @@ test:  ## Run tests with coverage
 test-fast:  ## Run only fast tests (skip slow + integration)
 	uv run pytest -m "not slow and not integration"
 
-lint:  ## Run linter (no auto-fix)
+lint:  ## Run linter + format check (no auto-fix; mirrors CI)
 	uv run ruff check .
+	uv run ruff format --check .
 
 format:  ## Auto-format and auto-fix lint issues
 	uv run ruff format .
