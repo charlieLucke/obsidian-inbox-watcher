@@ -31,7 +31,9 @@ use absolute paths):
 | `VAULT_WATCHER_RAW_DIR` | folder watched for new files | `~/0_Pipeline/In` |
 | `VAULT_WATCHER_PROCESSED_DIR` | where notes are written | `~/0_Pipeline/Out` |
 | `VAULT_WATCHER_ARCHIVE_DIR` | where originals are moved | `~/0_Pipeline/Archive` |
+| `VAULT_WATCHER_FAILED_DIR` | dead-letter dir for unprocessable inputs (+ `.error.txt` sidecar) | `~/0_Pipeline/Failed` |
 | `VAULT_WATCHER_DOMAINS` | seed Titan domains for classification (Gemini may add new ones) | `business,lernen,projekte,system` |
+| `VAULT_WATCHER_MAX_CHARS` | max characters of extracted text sent to Gemini (truncated + logged beyond) | `200000` |
 
 Notes are written with a Titan-required `domain:` frontmatter field (Gemini picks
 from the seed list or creates a new one); see `docs/ai/ARCHITECTURE.md`.
