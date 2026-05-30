@@ -7,18 +7,55 @@ RAG system.
 It watches a raw inbox for **TXT / PDF / DOCX / `.url`** files, extracts the text
 (crawling the page for URLs), classifies and summarizes it with `gemini-2.5-flash`,
 writes an Obsidian Markdown note (YAML frontmatter, action items, open questions)
-and archives the original. When the output folder points into Titan's vault,
-`brain-watcher` auto-ingests every note into the RAG index.
+and archives the original. Anything it can't process is moved aside with an error
+note instead of being retried forever.
 
-## Setup
+It runs perfectly **standalone** — it just writes the notes into a folder you
+choose. The **Titan** RAG integration is optional: point the output folder into
+Titan's vault and `brain-watcher` auto-ingests every note into the search index.
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+.
+## Prerequisites
+
+- **Linux or WSL2.** The watcher is built to run as a systemd user service and
+  reads `/proc/mounts` to pick its file-watching strategy, so it targets Linux
+  (a native box or Ubuntu under WSL2). Other operating systems are untested.
+- **Python 3.12+** and **[uv](https://docs.astral.sh/uv/)** (the package manager —
+  `uv` installs the right Python for you if needed).
+- **A Google Gemini API key.** Classification and summarization run on
+  `gemini-2.5-flash`. Create a key (the free tier is enough to try it) in
+  [Google AI Studio](https://aistudio.google.com/app/apikey).
+- **(Optional) Titan + `brain-watcher`** for the RAG integration — *not* required.
+  Without them the watcher simply writes Markdown notes into a folder.
+
+No extra system packages are needed: PDF / DOCX / HTML parsing comes from Python
+dependencies (`pypdf`, `python-docx`, `beautifulsoup4`) that `uv` installs for you.
+
+## Quickstart (standalone)
 
 ```bash
+# 1. Install dependencies and the git pre-commit hooks
 make install
+
+# 2. Provide your Gemini API key (the only required setting)
+mkdir -p ~/.config/vault_watcher
+echo 'GEMINI_API_KEY=your-real-key-here' > ~/.config/vault_watcher/env
+chmod 600 ~/.config/vault_watcher/env   # the file holds a secret
+
+# 3. Run it (the working folders are created on first start)
+make run
 ```
 
-This installs all dependencies and registers pre-commit hooks.
+With only the key set, the watcher uses these default folders and creates them
+automatically:
+
+- drop files into **`~/0_Pipeline/In`**
+- finished notes appear in **`~/0_Pipeline/Out`**
+- originals are moved to **`~/0_Pipeline/Archive`**
+- unprocessable files go to **`~/0_Pipeline/Failed`** (with a `.error.txt` reason)
+
+Drop a `.txt`, `.pdf`, `.docx` or `.url` file into the inbox and within a second or
+two a structured note appears in the output folder. To point those folders
+elsewhere (or into Titan's vault), set the variables below.
 
 ## Configuration
 
