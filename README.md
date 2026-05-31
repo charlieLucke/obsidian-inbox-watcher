@@ -75,14 +75,18 @@ use absolute paths):
 Notes are written with a Titan-required `domain:` frontmatter field (Gemini picks
 from the seed list or creates a new one); see `docs/ai/ARCHITECTURE.md`.
 
-For the Titan integration set `VAULT_WATCHER_PROCESSED_DIR` to a folder inside
-Titan's vault, e.g. `/mnt/f/vault/notes/inbox`. Keep the raw and archive dirs
-*outside* the vault. See `docs/ai/ARCHITECTURE.md`.
+Any absolute path works for the directories — the `/mnt/f/...` values below are
+**examples from the author's WSL2 setup** (where `/mnt/f` is the Windows `F:` drive).
+On a native Linux box just use paths under your home, e.g. `~/vault`.
 
-The raw dir may live on a Windows drive (e.g. `/mnt/f/0_Pipeline/In` →
-`F:\0_Pipeline\In`) so you can drop files from Explorer — the watcher
-auto-uses a polling observer there, since inotify is not delivered on the
-`/mnt` mount.
+For the optional Titan integration set `VAULT_WATCHER_PROCESSED_DIR` to a folder
+inside your RAG vault (the author uses `/mnt/f/vault/notes/inbox`). Keep the raw and
+archive dirs *outside* the vault. See `docs/ai/ARCHITECTURE.md`.
+
+If you run under WSL2 and want to drop files straight from Windows Explorer, the raw
+dir can live on a Windows drive (e.g. `/mnt/f/0_Pipeline/In` → `F:\0_Pipeline\In`);
+the watcher automatically uses a polling observer there, since inotify isn't
+delivered on the `/mnt` mount.
 
 ## Run & Develop
 

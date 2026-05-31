@@ -1,6 +1,12 @@
 # Service Deployment: Obsidian Inbox Watcher
 
-This package is managed as a standard systemd user-level service on Linux Mint / Ubuntu systems.
+This package runs as a standard **systemd user service** on Linux (and Ubuntu under
+WSL2). It needs no root.
+
+> **Placeholders:** values like `<your-user>` and paths such as `/mnt/f/vault` are
+> **examples from the author's setup** — replace them with your own. `<your-user>`
+> is your Linux username (`echo $USER`). The watcher itself works standalone; the
+> Titan integration is optional (see the project README).
 
 ## Quick Installation
 
@@ -16,17 +22,20 @@ To install and enable this service on your local system:
    make install
    ```
 
-3. **Configure the key and folders** in `~/.config/vault_watcher/env`
-   (absolute paths — systemd does not expand `~`):
+3. **Configure the key and folders** in `~/.config/vault_watcher/env`.
+   At minimum set `GEMINI_API_KEY`; the directories default to `~/0_Pipeline/*` if
+   omitted. Use absolute paths here (systemd does not expand `~`):
    ```ini
    GEMINI_API_KEY=your_actual_gemini_api_key_here
-   VAULT_WATCHER_RAW_DIR=/home/charl/0_Pipeline/In
-   VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox
-   VAULT_WATCHER_ARCHIVE_DIR=/home/charl/0_Pipeline/Archive
+   VAULT_WATCHER_RAW_DIR=/home/<your-user>/0_Pipeline/In
+   VAULT_WATCHER_PROCESSED_DIR=/home/<your-user>/0_Pipeline/Out
+   VAULT_WATCHER_ARCHIVE_DIR=/home/<your-user>/0_Pipeline/Archive
+   VAULT_WATCHER_FAILED_DIR=/home/<your-user>/0_Pipeline/Failed
    ```
-   `chmod 600 ~/.config/vault_watcher/env` since it holds the key. Pointing
-   `VAULT_WATCHER_PROCESSED_DIR` inside Titan's vault (`/mnt/f/vault`) lets
-   `brain-watcher` auto-ingest every generated note (see `docs/ai/ARCHITECTURE.md`).
+   `chmod 600 ~/.config/vault_watcher/env` since it holds the key. **Optional Titan
+   integration:** point `VAULT_WATCHER_PROCESSED_DIR` at a folder inside your RAG
+   vault (the author uses `/mnt/f/vault/notes/inbox`) so `brain-watcher` auto-ingests
+   every generated note (see `docs/ai/ARCHITECTURE.md`).
 
 4. **Link the unit into systemd user space**:
    ```bash
@@ -39,22 +48,24 @@ To install and enable this service on your local system:
    systemctl --user enable --now obsidian-inbox-watcher.service
    ```
 
-## Hub deployment (always-on Mini-PC, user `charlie`)
+## Hub deployment (optional — always-on server example)
 
-For the always-on hub use `obsidian-inbox-watcher.hub.service` instead of the WSL
-unit. It runs as user `charlie`, waits for the network (the dirs are fed/mirrored
-by Syncthing) and always restarts.
+This is the author's specific "always-on" topology: a small Mini-PC fed by Syncthing.
+You only need it if you want a similar setup; otherwise the Quick Installation above
+is enough. The hub uses a second unit, `obsidian-inbox-watcher.hub.service`, which
+runs as a dedicated user (`<hub-user>`), waits for the network, and always restarts.
+Substitute `<hub-user>` and the example mount point `/srv/cloud` with your own.
 
-1. Same `make install` as above (in `/home/charlie/projects/obsidian-inbox-watcher`).
+1. Same `make install` as above (in `~/projects/obsidian-inbox-watcher`).
 
-2. **Mount the SSD at `/srv/cloud`** (native ext4 — keeps inotify working) and
-   create the Syncthing folder boundaries:
-   - `/srv/cloud/inbox/raw` — Syncthing folder, **receive-only** on the hub (raw input).
-   - `/srv/cloud/vault` — Syncthing folder, **bidirectional** hub ↔ workstation.
-   - `/srv/cloud/archive`, `/srv/cloud/failed` — **local only, never synced**, so
-     raw inputs and dead-lettered files never reach Titan's vault.
+2. **Mount a native ext4 disk** (example mount point `/srv/cloud`; ext4 keeps inotify
+   working) and create the Syncthing folder boundaries underneath it:
+   - `.../inbox/raw` — Syncthing folder, **receive-only** on the hub (raw input).
+   - `.../vault` — Syncthing folder, **bidirectional** hub ↔ workstation.
+   - `.../archive`, `.../failed` — **local only, never synced**, so raw inputs and
+     dead-lettered files never reach the RAG vault.
 
-3. **Configure** `/home/charlie/.config/vault_watcher/env` (absolute paths):
+3. **Configure** `~/.config/vault_watcher/env` for the hub user (absolute paths):
    ```ini
    GEMINI_API_KEY=your_actual_gemini_api_key_here
    VAULT_WATCHER_RAW_DIR=/srv/cloud/inbox/raw
@@ -64,21 +75,25 @@ by Syncthing) and always restarts.
    VAULT_WATCHER_DOMAINS=business,lernen,projekte,system
    VAULT_WATCHER_MAX_CHARS=200000
    ```
-   `chmod 600 ~/.config/vault_watcher/env`. The note dir lives inside the
-   Syncthing `vault/` folder so notes replicate to the workstation, where
-   `brain-watcher` ingests them into Titan when the PC is on.
+   `chmod 600 ~/.config/vault_watcher/env`. The note dir lives inside the Syncthing
+   `vault/` folder so notes replicate to the workstation, where `brain-watcher`
+   ingests them into Titan when that machine is on.
 
-4. **Link, reload, enable and start** (same commands as below, with the hub unit):
+   > The unit file ships with the author's paths (`/home/charlie/...`). Edit
+   > `WorkingDirectory`, `EnvironmentFile` and `ExecStart` in
+   > `deploy/obsidian-inbox-watcher.hub.service` to match your user before linking it.
+
+4. **Link, reload, enable and start** (with the hub unit):
    ```bash
    systemctl --user link ~/projects/obsidian-inbox-watcher/deploy/obsidian-inbox-watcher.hub.service
    systemctl --user daemon-reload
    systemctl --user enable --now obsidian-inbox-watcher.hub.service
    ```
-   Run `loginctl enable-linger charlie` so the user service keeps running while
+   Run `loginctl enable-linger <hub-user>` so the user service keeps running while
    no one is logged in.
 
 > Out of scope here (hub provisioning, tracked separately): installing `uv`/SSD
-> tooling, formatting/mounting the SSD, the backup job, and the Telegram capture
+> tooling, formatting/mounting the disk, the backup job, and the Telegram capture
 > service (a sibling repo). See `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
 
 ## Control Commands
