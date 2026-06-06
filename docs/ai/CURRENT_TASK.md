@@ -26,10 +26,14 @@ Harden the watcher and prepare its migration to the always-on Mini-PC hub, per
 - **WI-6** send PDFs to Gemini multimodally (handles scans; own plan).
 
 ## Next Steps (operator, on the hub)
-- [ ] Mount the SSD at `/srv/cloud`, create the Syncthing folder boundaries, write
-      `/home/charlie/.config/vault_watcher/env`, link + enable the `.hub.service`.
-- [ ] Paste the real `GEMINI_API_KEY`; drop a test file and confirm a note flows
-      Syncthing → workstation vault → brain-watcher → Titan.
+- [x] **Hub deployed (2026-06-06):** HDD at `/srv/cloud`, uv + repo + `uv sync`,
+      `~/.config/vault_watcher/env` (reused key), linger on, `.hub.service` linked +
+      enabled + running. Local e2e test passed: a `.txt` in `/srv/cloud/inbox/raw`
+      became a `domain`-frontmatter note in `/srv/cloud/vault/notes/inbox` in ~16 s
+      (inotify on ext4), original archived.
+- [ ] Create the Syncthing folder boundaries (`inbox/raw` receive-only, `vault`
+      bidirectional; `archive`/`failed` local-only) and confirm a note flows
+      hub → workstation vault → brain-watcher → Titan.
 
 ## Notes
 - Tests mock the Gemini API, so `make check` runs offline.
