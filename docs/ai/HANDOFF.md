@@ -31,13 +31,21 @@ always-on hub `charlie-mini-pc` and verified it end-to-end.
 - Nothing in flight. Service is `active (running)` + `enabled`.
 
 ## Next concrete step (operator, on the hub)
-- **Syncthing folders:** `/srv/cloud/inbox/raw` (receive-only) + `/srv/cloud/vault`
-  (bidirectional ↔ workstation); `.stignore` for `.obsidian/workspace*`, caches,
-  `.trash/`. **Open precondition:** is there a Syncthing on the workstation
-  (`charliespc`) that sees `F:\vault`, and what does the hub's existing
-  `obsidian-vault` sync with today? **Until this is wired, nothing feeds `raw` and
-  notes don't reach Titan** — the hub-local pipeline is proven but not cross-machine.
-- Then **restic backups** to the H100 NAS (needs sudo + NFS/SMB details).
+- **DONE 2026-06-06 — vault Syncthing sync:** `titan-vault` shares hub
+  `/srv/cloud/vault` ↔ workstation `F:\vault` (bidirectional, `.stignore` excludes
+  `.git`/`.obsidian` caches). Verified both ways. Hub & workstation were already
+  paired devices; workstation runs SyncTrayzor (autostart already set). Hub syncthing
+  is the Docker container — it needed a new bind mount
+  `/srv/cloud/vault:/var/syncthing/titan-vault`. The personal `Obsidian-KI-Vault`
+  share (`C:\Users\charl\Documents\Obsidian`) is separate and was left untouched.
+- **NEXT: raw-input path** to `/srv/cloud/inbox/raw`. The Telegram capture service
+  (Appendix A) runs on the hub and writes raw files directly (no Syncthing). For
+  phone/laptop drops via Syncthing, mind the receive-only "hub consumes files"
+  subtlety (the watcher moves files out of raw → a receive-only folder then shows
+  "locally changed"). Design this before wiring it.
+- Then **restic backups** to the H100 NAS (needs sudo + NFS/SMB details). Note: the
+  hub's Syncthing vault mirror is an off-machine *copy*, not a real backup (deletes
+  propagate) — restic is still needed.
 - **Cleanup:** delete the eMMC Docker originals (~10 G: `/var/lib/docker`,
   `/data/mysql`, old `docker/*` bind dirs) + dangling volumes `38a0ee…`, `n8n_data`.
 

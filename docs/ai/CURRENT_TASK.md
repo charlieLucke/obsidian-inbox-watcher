@@ -31,9 +31,16 @@ Harden the watcher and prepare its migration to the always-on Mini-PC hub, per
       enabled + running. Local e2e test passed: a `.txt` in `/srv/cloud/inbox/raw`
       became a `domain`-frontmatter note in `/srv/cloud/vault/notes/inbox` in ~16 s
       (inotify on ext4), original archived.
-- [ ] Create the Syncthing folder boundaries (`inbox/raw` receive-only, `vault`
-      bidirectional; `archive`/`failed` local-only) and confirm a note flows
-      hub → workstation vault → brain-watcher → Titan.
+- [x] **Vault Syncthing folder live (2026-06-06):** `titan-vault` shares hub
+      `/srv/cloud/vault` ↔ workstation `F:\vault` (bidirectional; `.git`/`.obsidian`
+      caches excluded via `.stignore`). Verified both ways (a note created on the hub
+      reached `F:\vault` in ~12 s; deletion propagated). Hub container needed a new
+      bind mount `/srv/cloud/vault:/var/syncthing/titan-vault`. The existing personal
+      `Obsidian-KI-Vault` share was left untouched.
+- [ ] Wire a raw-input path to `/srv/cloud/inbox/raw` (Telegram service runs on the
+      hub directly; phone/laptop as receive-only Syncthing sources) — own phase due
+      to the receive-only "consumes files" subtlety. Then confirm a full
+      capture → note → Titan flow once brain-watcher/Titan are running.
 
 ## Notes
 - Tests mock the Gemini API, so `make check` runs offline.
