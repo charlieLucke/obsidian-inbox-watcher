@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from obsidian_inbox_watcher import main as watcher
+from obsidian_inbox_watcher import pipeline
+from obsidian_inbox_watcher import watcher as watchermod
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -117,7 +119,7 @@ def test_watcher_pipeline(tmp_path):
     # 2. Process files (using Mock)
     with (
         patch(
-            "obsidian_inbox_watcher.main.load_api_key",
+            "obsidian_inbox_watcher.pipeline.load_api_key",
             return_value="dummy-key-for-testing",
         ),
         patch("google.genai.Client", side_effect=get_mock_gemini_client),
@@ -210,8 +212,8 @@ def test_inbox_handler_routes_configured_dirs(monkeypatch):
         calls["archive_dir"] = archive_dir
         calls["failed_dir"] = failed_dir
 
-    monkeypatch.setattr(watcher, "process_file", fake_process)
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr(watchermod, "process_file", fake_process)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
 
     handler = watcher.InboxHandler("/out", "/arch", "/failed")
     handler.on_created(FileCreatedEvent("/raw/note.txt"))
@@ -234,8 +236,8 @@ def test_inbox_handler_processes_moved_file(monkeypatch):
         calls["archive_dir"] = archive_dir
         calls["failed_dir"] = failed_dir
 
-    monkeypatch.setattr(watcher, "process_file", fake_process)
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr(watchermod, "process_file", fake_process)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
 
     handler = watcher.InboxHandler("/out", "/arch", "/failed")
     handler.on_moved(FileMovedEvent("/tmp/.syncthing.note.txt.tmp", "/raw/note.txt"))
@@ -255,8 +257,8 @@ def test_rescan_dispatches_only_supported_files(tmp_path, monkeypatch):
     (raw_dir / "sub").mkdir()
 
     processed: list[str] = []
-    monkeypatch.setattr(watcher, "process_file", lambda fp, **_kw: processed.append(fp))
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr(watchermod, "process_file", lambda fp, **_kw: processed.append(fp))
+    monkeypatch.setattr("time.sleep", lambda _s: None)
 
     handler = watcher.InboxHandler(
         str(tmp_path / "out"), str(tmp_path / "arch"), str(tmp_path / "failed")
@@ -270,7 +272,7 @@ def test_select_observer_polling_for_translated_fs(monkeypatch):
     """Translated/network filesystems (drvfs/9p/cifs/nfs) use the polling observer."""
     from watchdog.observers.polling import PollingObserver
 
-    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: "9p")
+    monkeypatch.setattr(watchermod, "_filesystem_type", lambda _p: "9p")
     assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
 
 
@@ -278,7 +280,7 @@ def test_select_observer_inotify_for_native_fs(monkeypatch):
     """Native local filesystems (ext4) use the inotify observer."""
     from watchdog.observers.polling import PollingObserver
 
-    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: "ext4")
+    monkeypatch.setattr(watchermod, "_filesystem_type", lambda _p: "ext4")
     assert not isinstance(watcher.select_observer("/srv/cloud/inbox/raw"), PollingObserver)
 
 
@@ -286,7 +288,7 @@ def test_select_observer_falls_back_to_path_heuristic(monkeypatch):
     """When the filesystem type is unknown, fall back to the /mnt path heuristic."""
     from watchdog.observers.polling import PollingObserver
 
-    monkeypatch.setattr(watcher, "_filesystem_type", lambda _p: None)
+    monkeypatch.setattr(watchermod, "_filesystem_type", lambda _p: None)
     assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
     assert not isinstance(watcher.select_observer("/home/charl/0_Pipeline/In"), PollingObserver)
 
@@ -358,10 +360,10 @@ def test_process_file_truncates_and_warns(tmp_path, monkeypatch, caplog):
         client.models.generate_content = generate_content
         return client
 
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
     with (
         caplog.at_level(logging.WARNING),
-        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("obsidian_inbox_watcher.pipeline.load_api_key", return_value="key"),
         patch("google.genai.Client", side_effect=capture_client),
     ):
         watcher.process_file(
@@ -436,9 +438,9 @@ def test_process_file_retries_transient_then_succeeds(tmp_path, monkeypatch):
 
     # tenacity attaches the Retrying instance as .retry at decoration time.
     monkeypatch.setattr(watcher._generate_note_json.retry, "sleep", lambda _s: None)  # type: ignore[attr-defined]
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
     with (
-        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("obsidian_inbox_watcher.pipeline.load_api_key", return_value="key"),
         patch("google.genai.Client", side_effect=flaky_client),
     ):
         watcher.process_file(
@@ -471,9 +473,9 @@ def test_process_file_dead_letters_permanent_failure(tmp_path, monkeypatch):
 
     # tenacity attaches the Retrying instance as .retry at decoration time.
     monkeypatch.setattr(watcher._generate_note_json.retry, "sleep", lambda _s: None)  # type: ignore[attr-defined]
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
     with (
-        patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"),
+        patch("obsidian_inbox_watcher.pipeline.load_api_key", return_value="key"),
         patch("google.genai.Client", side_effect=broken_client),
     ):
         watcher.process_file(
@@ -496,8 +498,8 @@ def test_process_file_dead_letters_empty_text(tmp_path, monkeypatch):
     txt_path = dirs["raw"] / "empty.txt"
     txt_path.write_text("   \n\n", encoding="utf-8")
 
-    monkeypatch.setattr("obsidian_inbox_watcher.main.time.sleep", lambda _s: None)
-    with patch("obsidian_inbox_watcher.main.load_api_key", return_value="key"):
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    with patch("obsidian_inbox_watcher.pipeline.load_api_key", return_value="key"):
         watcher.process_file(
             str(txt_path),
             processed_dir=str(dirs["processed"]),
@@ -534,8 +536,8 @@ def test_frontmatter_survives_hostile_title(tmp_path, monkeypatch):
         "questions": "Frage?",
         "action_items": [],
     }
-    monkeypatch.setattr(watcher, "load_api_key", lambda: "dummy")
-    monkeypatch.setattr(watcher, "_generate_note_json", lambda key, prompt: json.dumps(hostile))
+    monkeypatch.setattr(pipeline, "load_api_key", lambda: "dummy")
+    monkeypatch.setattr(pipeline, "_generate_note_json", lambda key, prompt: json.dumps(hostile))
 
     watcher.process_file(
         str(txt_path),
