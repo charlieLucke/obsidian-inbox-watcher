@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 import os
 import re
@@ -11,11 +10,12 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any
 
 import docx
 import requests
+import yaml
 from bs4 import BeautifulSoup
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pypdf import PdfReader
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
@@ -28,6 +28,41 @@ logger = logging.getLogger(__name__)
 
 # Input file extensions the watcher knows how to process.
 _SUPPORTED_EXTENSIONS = (".txt", ".pdf", ".docx", ".url")
+
+
+class GeminiNote(BaseModel):
+    """Validated and normalized Gemini response for one inbox document.
+
+    Tolerant gegenüber typischen LLM-Abweichungen (Liste statt String,
+    fehlende Felder); strukturell kaputte Antworten schlagen als
+    ValidationError fehl und landen im Dead-Letter-Ordner.
+    """
+
+    titel: str = "Unbenannt"
+    domain: str = ""
+    tags: list[str] = Field(default_factory=list)
+    summary: str = "Keine Zusammenfassung verfügbar."
+    questions: str = "Keine Fragen identifiziert."
+    action_items: list[str] = Field(default_factory=list)
+
+    @field_validator("titel", "domain", "summary", "questions", mode="before")
+    @classmethod
+    def _stringify(cls, v: object) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, list):
+            return " ".join(str(item) for item in v)
+        return v if isinstance(v, str) else str(v)
+
+    @field_validator("tags", "action_items", mode="before")
+    @classmethod
+    def _coerce_list(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            return [v]
+        if not isinstance(v, list):
+            return []
+        return [str(item) for item in v]
+
 
 # How often the safety-net rescan re-checks the raw dir for files whose
 # filesystem event was missed (see _rescan_loop / InboxHandler.rescan).
@@ -444,59 +479,66 @@ Textinhalt, der analysiert werden soll:
             _dead_letter(filepath, failed_dir, "gemini_failed", f"{type(e).__name__}: {e}")
             return
 
-        # Step 4: Parse Results
+        # Step 4: Parse + Validate Results (Pydantic: Parsing und Schema in einem)
         try:
-            result: dict[str, Any] = json.loads(response_text)
-        except Exception as e:
-            logger.exception("Gemini returned invalid JSON for %s", filepath)
+            result = GeminiNote.model_validate_json(response_text)
+        except ValidationError as e:
+            logger.exception("Gemini returned invalid JSON/schema for %s", filepath)
             _dead_letter(filepath, failed_dir, "invalid_json", f"{type(e).__name__}: {e}")
             return
-        domain = normalize_domain(str(result.get("domain") or ""))
+        domain = normalize_domain(result.domain)
         logger.info(
             "Gemini API returned valid response. Title: '%s', Domain: '%s'",
-            result.get("titel"),
+            result.titel,
             domain,
         )
 
         # Format tags to make sure we have exactly 5 elements
-        tags_list: list[str] = result.get("tags", [])
-        if not isinstance(tags_list, list):
-            tags_list = []
+        tags_list = result.tags
         if len(tags_list) < 5:
             tags_list += ["Knowledge", "System", "Archive", "Inbox", "Automated"]
         tags_list = tags_list[:5]
-        tags_str = ", ".join(f'"{t}"' for t in tags_list)
 
         # Format action items
-        action_items: list[str] = result.get("action_items", [])
-        if not isinstance(action_items, list) or not action_items:
-            action_items = ["Keine direkten Action Items identifiziert"]
+        action_items = result.action_items or ["Keine direkten Action Items identifiziert"]
         action_items_str = "\n".join(f"- [ ] {item}" for item in action_items)
 
-        # Format YAML metadata and document structure
+        # Frontmatter via yaml.safe_dump statt f-String: ein Titel/Source-Wert
+        # mit ':' oder '"' würde sonst das YAML brechen und Titan lehnte die
+        # Note als "domain fehlt" ab.
         created_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        frontmatter = yaml.safe_dump(
+            {
+                "domain": domain,
+                "created": created_date,
+                "source": source_origin,
+                "tags": tags_list,
+                "ai_processed": True,
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ).strip()
+
+        title = result.titel.strip() or "Unbenannt"
+        summary = result.summary.strip() or "Keine Zusammenfassung verfügbar."
+        questions = result.questions.strip() or "Keine Fragen identifiziert."
         markdown_content = f"""---
-domain: {domain}
-created: {created_date}
-source: {source_origin}
-tags: [{tags_str}]
-ai_processed: true
+{frontmatter}
 ---
-# {result.get("titel", "Unbenannt")}
+# {title}
 
 ## Zusammenfassung
-{result.get("summary", "Keine Zusammenfassung verfügbar.")}
+{summary}
 
 ## Wissenslücken / Fragen an mich
 > [!IMPORTANT]
-> {result.get("questions", "Keine Fragen identifiziert.")}
+> {questions}
 
 ## Action Items
 {action_items_str}
 """
 
         # Step 5: Write markdown file
-        title = result.get("titel", "Unbenannt")
         safe_title = re.sub(r'[\/*?:"<>|]', "", title)
         safe_title = re.sub(r"\s+", "_", safe_title)
         filename = f"{created_date}_{safe_title}.md"

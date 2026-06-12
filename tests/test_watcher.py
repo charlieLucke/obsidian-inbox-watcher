@@ -510,3 +510,47 @@ def test_process_file_dead_letters_empty_text(tmp_path, monkeypatch):
     sidecar = (dirs["failed"] / "empty.txt.error.txt").read_text(encoding="utf-8")
     assert "empty_text" in sidecar
     assert list(dirs["processed"].iterdir()) == []
+
+
+def test_frontmatter_survives_hostile_title(tmp_path, monkeypatch):
+    """Ein Titel mit ':' und '"' darf das YAML-Frontmatter nicht brechen (P1.5)."""
+    import yaml
+
+    raw_dir = tmp_path / "raw"
+    processed_dir = tmp_path / "out"
+    archive_dir = tmp_path / "archive"
+    failed_dir = tmp_path / "failed"
+    for d in (raw_dir, processed_dir, archive_dir, failed_dir):
+        d.mkdir()
+
+    txt_path = raw_dir / "hostile.txt"
+    txt_path.write_text("Beliebiger Inhalt.", encoding="utf-8")
+
+    hostile = {
+        "titel": 'Krise: "Alles kaputt" — Teil 2',
+        "domain": "System Themen",
+        "tags": ["a"],
+        "summary": "Zusammenfassung mit: Doppelpunkt",
+        "questions": "Frage?",
+        "action_items": [],
+    }
+    monkeypatch.setattr(watcher, "load_api_key", lambda: "dummy")
+    monkeypatch.setattr(watcher, "_generate_note_json", lambda key, prompt: json.dumps(hostile))
+
+    watcher.process_file(
+        str(txt_path),
+        processed_dir=str(processed_dir),
+        archive_dir=str(archive_dir),
+        failed_dir=str(failed_dir),
+    )
+
+    notes = list(processed_dir.iterdir())
+    assert len(notes) == 1, f"Note nicht erzeugt, failed_dir: {list(failed_dir.iterdir())}"
+    content = notes[0].read_text(encoding="utf-8")
+
+    # Frontmatter muss valides YAML sein und die Felder unbeschadet enthalten
+    _, fm_block, _body = content.split("---", 2)
+    meta = yaml.safe_load(fm_block)
+    assert meta["domain"] == "system-themen"
+    assert meta["ai_processed"] is True
+    assert isinstance(meta["tags"], list) and len(meta["tags"]) == 5

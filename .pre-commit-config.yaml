@@ -31,4 +31,6 @@ repos:
     hooks:
       - id: mypy
         files: ^(src|tests)/
-        additional_dependencies: []
+        additional_dependencies:
+          - pydantic>=2.0
+          - types-pyyaml>=6.0
