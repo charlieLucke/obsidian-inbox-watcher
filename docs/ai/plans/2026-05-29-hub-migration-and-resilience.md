@@ -11,7 +11,7 @@
 
 ## 1. Why this plan exists
 
-Today the watcher runs on the workstation `charliespc` under WSL2, with the raw
+Today the watcher runs on the workstation `<workstation>` under WSL2, with the raw
 inbox on the Windows drive (`/mnt/f/0_Pipeline/In`, drvfs) and notes written
 straight into Titan's vault (`/mnt/f/vault/notes/inbox`). Two facts about that
 environment hid latent bugs:
@@ -43,7 +43,7 @@ into Titan **when the workstation is on**. The integration gains one Syncthing
 hop and is otherwise unchanged.
 
 ### Target hub (context for the implementer)
-`charlie-Mini-PC`, Ubuntu 24.04, Intel Pentium J3710 (4 weak cores), 7.7 GB RAM,
+`<hub-host>`, Ubuntu 24.04, Intel Pentium J3710 (4 weak cores), 7.7 GB RAM,
 116 GB eMMC + a planned USB-3 SSD. Already runs Docker (syncthing, n8n, mysql,
 planka), Tailscale, `unattended-upgrades`. Hard constraint from the weak CPU:
 **all heavy processing stays in the Gemini API** — no local OCR, transcription,

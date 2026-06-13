@@ -127,8 +127,7 @@ PDF/DOCX/URL → (this watcher: Gemini → .md) → /mnt/f/vault/notes/inbox/
 ## Hub migration (always-on Mini-PC)
 
 The watcher is migrating from the WSL2 workstation to an always-on Mini-PC hub
-(`charlie-Mini-PC`, Ubuntu, user `charlie`) so the workstation no longer needs to
-be awake to accept input. The hub changes two things that surfaced latent bugs
+(Ubuntu) so the workstation no longer needs to be awake to accept input. The hub changes two things that surfaced latent bugs
 (now fixed in WI-1/WI-2/WI-3):
 
 - The raw inbox is native **ext4** → `select_observer()` uses native **inotify**
@@ -161,14 +160,14 @@ Syncthing folders; `archive/`, `failed/` (and a future `processing/`) are
 
 Two systemd **user** units, one per host:
 
-- **WSL workstation** (user `charl`): `deploy/obsidian-inbox-watcher.service`.
-  - Environment: `EnvironmentFile=/home/charl/.config/vault_watcher/env`.
+- **WSL workstation:** `deploy/obsidian-inbox-watcher.service`.
+  - Environment: `EnvironmentFile=/home/<your-user>/.config/vault_watcher/env`.
   - Executable:
-    `/home/charl/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
-- **Always-on hub** (user `charlie`): `deploy/obsidian-inbox-watcher.hub.service`.
+    `/home/<your-user>/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
+- **Always-on hub:** `deploy/obsidian-inbox-watcher.hub.service`.
   - Adds `After=/Wants=network-online.target` (Syncthing-fed dirs) and
     `StartLimitIntervalSec=0` so it always restarts.
-  - Paths under `/home/charlie/...`; env file points the dirs at `/srv/cloud/*`.
+  - Paths under `/home/<hub-user>/...`; env file points the dirs at `/srv/cloud/*`.
 
 Both load the Gemini key + `VAULT_WATCHER_*` overrides from the env file; `main()`
 also calls `load_env_file()` so the same file works in dev runs. systemd does not

@@ -43,7 +43,7 @@ die lokale Kopie des Syncthing-gespiegelten Vaults des Hubs; Syncthing replizier
 Hop und ist sonst unverändert.
 
 ### Ziel-Hub (Kontext für den Implementierer)
-`charlie-Mini-PC`, Ubuntu 24.04, Intel Pentium J3710 (4 schwache Kerne), 7,7 GB RAM,
+`<hub-host>`, Ubuntu 24.04, Intel Pentium J3710 (4 schwache Kerne), 7,7 GB RAM,
 116 GB eMMC + eine geplante USB-3-SSD. Läuft bereits Docker (syncthing, n8n, mysql,
 planka), Tailscale, `unattended-upgrades`. Harte Einschränkung durch die schwache CPU:
 **alle Schwerverarbeitung bleibt in der Gemini-API** — kein lokales OCR, keine Transkription,
