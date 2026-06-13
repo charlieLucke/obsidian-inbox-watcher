@@ -11,7 +11,7 @@
 
 ## 1. Warum dieser Plan existiert
 
-Heute läuft der Watcher auf der Workstation `charliespc` unter WSL2, mit der Roh-
+Heute läuft der Watcher auf der Workstation `<workstation>` unter WSL2, mit der Roh-
 Inbox auf dem Windows-Laufwerk (`/mnt/f/0_Pipeline/In`, drvfs) und Notizen direkt
 in Titans Vault geschrieben (`/mnt/f/vault/notes/inbox`). Zwei Fakten dieser
 Umgebung verbargen latente Bugs:

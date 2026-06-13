@@ -127,7 +127,7 @@ PDF/DOCX/URL → (dieser Watcher: Gemini → .md) → /mnt/f/vault/notes/inbox/
 ## Hub-Migration (Always-on-Mini-PC)
 
 Der Watcher migriert von der WSL2-Workstation auf einen Always-on-Mini-PC-Hub
-(`charlie-Mini-PC`, Ubuntu, Nutzer `charlie`), sodass die Workstation nicht mehr
+(Ubuntu), sodass die Workstation nicht mehr
 wach sein muss, um Input anzunehmen. Der Hub ändert zwei Dinge, die latente Bugs
 zutage förderten (jetzt in WI-1/WI-2/WI-3 behoben):
 
@@ -161,14 +161,14 @@ Syncthing-Ordner; `archive/`, `failed/` (und ein künftiges `processing/`) sind
 
 Zwei systemd-**User**-Units, eine pro Host:
 
-- **WSL-Workstation** (Nutzer `charl`): `deploy/obsidian-inbox-watcher.service`.
-  - Environment: `EnvironmentFile=/home/charl/.config/vault_watcher/env`.
+- **WSL-Workstation:** `deploy/obsidian-inbox-watcher.service`.
+  - Environment: `EnvironmentFile=/home/<your-user>/.config/vault_watcher/env`.
   - Executable:
-    `/home/charl/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
-- **Always-on-Hub** (Nutzer `charlie`): `deploy/obsidian-inbox-watcher.hub.service`.
+    `/home/<your-user>/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher`.
+- **Always-on-Hub:** `deploy/obsidian-inbox-watcher.hub.service`.
   - Ergänzt `After=/Wants=network-online.target` (Syncthing-gespeiste Verzeichnisse) und
     `StartLimitIntervalSec=0`, sodass er immer neu startet.
-  - Pfade unter `/home/charlie/...`; die Env-Datei zeigt die Verzeichnisse auf `/srv/cloud/*`.
+  - Pfade unter `/home/<hub-user>/...`; die Env-Datei zeigt die Verzeichnisse auf `/srv/cloud/*`.
 
 Beide laden den Gemini-Key + `VAULT_WATCHER_*`-Overrides aus der Env-Datei; `main()`
 ruft außerdem `load_env_file()` auf, sodass dieselbe Datei in Dev-Läufen funktioniert. systemd

@@ -66,5 +66,5 @@ Always-on-Hub `charlie-mini-pc` deployt und end-to-end verifiziert.
   Deploy-Key oder einen weiteren Tarball-Push.
 - **Workstation-WSL-Networking** fällt oft auf `networkingMode None` zurück (kein Netz
   in WSL → kann nicht aus WSL pushen); Fix mit `wsl --shutdown` und dann Neustart.
-- Hub-Zugriff: `C:\Users\charl\Desktop\Mini-PC.bat` → `ssh charlie@100.115.11.46`.
+- Hub-Zugriff: lokales SSH-Shortcut-Skript → `ssh <hub-user>@<hub-ip>`.
 - Hub-Env-Pfade (absolut, systemd expandiert `~` nicht): siehe deploy/README.md Hub-Abschnitt.

@@ -79,7 +79,7 @@ Ersetze `<hub-user>` und den Beispiel-Mountpoint `/srv/cloud` durch deine eigene
    `vault/`-Ordners, sodass Notizen zur Workstation repliziert werden, wo `brain-watcher`
    sie in Titan ingestet, wenn diese Maschine an ist.
 
-   > Die Unit-Datei wird mit den Pfaden des Autors ausgeliefert (`/home/charlie/...`). Editiere
+   > Die Unit-Datei wird mit Beispiel-Pfaden ausgeliefert (`/home/<hub-user>/...`). Editiere
    > `WorkingDirectory`, `EnvironmentFile` und `ExecStart` in
    > `deploy/obsidian-inbox-watcher.hub.service` auf deinen Nutzer, bevor du sie verlinkst.
 

@@ -10,6 +10,11 @@ Wird eine Datei erkannt, extrahiert der Service den Text (und crawlt bei `.url`-
 
 Es ist das Dokumentverarbeitungs-**Frontend zu Titan** (dem RAG-Service). Indem man seinen Processed-Notes-Ordner in Titans Vault zeigen lässt (`/mnt/f/vault`, z. B. `notes/inbox/`), ingestet der `brain-watcher`-Service jede generierte Notiz automatisch in Titan — und gibt dem RAG-System die PDF-/DOCX-/URL-Ingestion, die ihm sonst fehlt (brain-watcher ingestet nur `.md` automatisch).
 
+> **Hinweis zu den Pfaden:** Die konkreten Verzeichnisse in diesem Dokument
+> (`/mnt/f/vault`, `~/0_Pipeline/…`, `/srv/cloud/…`) stammen aus dem Deployment des
+> Autors (WSL2-Workstation + Always-on-Mini-PC als „Hub") und sind **Beispiele**. Alle
+> Pfade sind über die `VAULT_WATCHER_*`-Umgebungsvariablen frei konfigurierbar.
+
 ## Stack
 - **Sprache:** Python 3.12+
 - **Paketmanager:** uv
@@ -31,8 +36,8 @@ tests/                         # Test-Suite
 ├── test_smoke.py              # Import-Verifikation
 └── test_watcher.py            # End-to-end-Integration und API-Mocking-Tests
 deploy/                        # Deployment-Konfiguration
-├── obsidian-inbox-watcher.service      # Systemd-User-Unit (WSL-Workstation, Nutzer charl)
-├── obsidian-inbox-watcher.hub.service  # Systemd-User-Unit (Always-on-Hub, Nutzer charlie)
+├── obsidian-inbox-watcher.service      # Systemd-User-Unit (WSL-Workstation)
+├── obsidian-inbox-watcher.hub.service  # Systemd-User-Unit (Always-on-Hub)
 └── README.md                  # Deployment-Administrationsanleitung
 docs/ai/                       # KI-Kontext und Dokumentation
 ```
@@ -85,6 +90,6 @@ Die systemd-Unit lädt diese aus `EnvironmentFile=~/.config/vault_watcher/env`; 
 - **Processed:** `VAULT_WATCHER_PROCESSED_DIR` — wo fertige Notizen landen; hier `/mnt/f/vault/notes/inbox`.
 - **Archive:** `VAULT_WATCHER_ARCHIVE_DIR` (Default `~/0_Pipeline/Archive`) — Originale aufbewahrt, um Reprocessing zu vermeiden.
 - **Failed (Dead-Letter):** `VAULT_WATCHER_FAILED_DIR` (Default `~/0_Pipeline/Failed`) — unverarbeitbare Inputs + `.error.txt`-Sidecars, aus der Inbox herausgeschoben, damit sie nicht für immer wiederholt werden.
-- **Hub:** der Always-on-Mini-PC (`charlie-Mini-PC`, Nutzer `charlie`), auf den der Watcher migriert; Roh-Inbox von Syncthing gespeist, Output-Vault zurück zur Workstation gespiegelt. Siehe `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
+- **Hub:** der Always-on-Mini-PC, auf den der Watcher migriert; Roh-Inbox von Syncthing gespeist, Output-Vault zurück zur Workstation gespiegelt. Siehe `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
 - **Titan / brain-watcher:** der RAG-Service und der Daemon, der `/mnt/f/vault` überwacht und `.md`-Notizen darin ingestet.
 - **Personal Corporate Memory:** der Obsidian-Vault des Nutzers, der Lern-, Trading-, Kapitaldienstleistungs- und Infrastruktur-Kontext erfasst.
