@@ -290,7 +290,7 @@ def test_select_observer_falls_back_to_path_heuristic(monkeypatch):
 
     monkeypatch.setattr(watchermod, "_filesystem_type", lambda _p: None)
     assert isinstance(watcher.select_observer("/mnt/f/0_Pipeline/In"), PollingObserver)
-    assert not isinstance(watcher.select_observer("/home/charl/0_Pipeline/In"), PollingObserver)
+    assert not isinstance(watcher.select_observer("/home/user/0_Pipeline/In"), PollingObserver)
 
 
 def test_get_known_domains_default(monkeypatch):
