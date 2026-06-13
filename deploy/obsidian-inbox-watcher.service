@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/<your-user>/projects/obsidian-inbox-watcher
-EnvironmentFile=/home/<your-user>/.config/vault_watcher/env
-ExecStart=/home/<your-user>/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher
+WorkingDirectory=/home/charl/projects/obsidian-inbox-watcher
+EnvironmentFile=/home/charl/.config/vault_watcher/env
+ExecStart=/home/charl/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher
 Restart=always
 RestartSec=5
 

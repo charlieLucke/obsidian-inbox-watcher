@@ -9,9 +9,9 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-WorkingDirectory=/home/<hub-user>/projects/obsidian-inbox-watcher
-EnvironmentFile=/home/<hub-user>/.config/vault_watcher/env
-ExecStart=/home/<hub-user>/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher
+WorkingDirectory=/home/charlie/projects/obsidian-inbox-watcher
+EnvironmentFile=/home/charlie/.config/vault_watcher/env
+ExecStart=/home/charlie/projects/obsidian-inbox-watcher/.venv/bin/obsidian-inbox-watcher
 Restart=always
 RestartSec=5
 
