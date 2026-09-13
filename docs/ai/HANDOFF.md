@@ -1,70 +1,70 @@
-# Handoff
+# Übergabe
 
-> Written at session end or before hitting a usage limit.
-> The next session (or different model) starts here.
-> Overwrite this file with each new handoff.
+> Geschrieben am Sitzungsende oder bevor ein Nutzungslimit erreicht wird.
+> Die nächste Sitzung (oder ein anderes Modell) beginnt hier.
+> Diese Datei mit jeder neuen Übergabe überschreiben.
 
-# Handoff – 2026-06-06
-Model: Claude Opus 4.8 (operator session: hub deployment)
+# Übergabe – 2026-06-06
+Modell: Claude Opus 4.8 (Operator-Sitzung: Hub-Deployment)
 
-## Done in this session
-The watcher code was already complete (WI-1/1b/2/3/5/7 committed; WI-4 + WI-6
-deferred to IDEAS). This session was operator-side — deployed the watcher onto the
-always-on hub `<hub-host>` and verified it end-to-end.
-- **Mini-PC Docker migration:** moved Docker off the eMMC onto the USB HDD
-  `/srv/cloud` (data-root `/srv/cloud/docker` + all DB bind mounts under
+## In dieser Sitzung erledigt
+Der Watcher-Code war bereits vollständig (WI-1/1b/2/3/5/7 committet; WI-4 + WI-6
+nach IDEAS zurückgestellt). Diese Sitzung war operator-seitig — den Watcher auf den
+Always-on-Hub `<hub-host>` deployt und end-to-end verifiziert.
+- **Mini-PC-Docker-Migration:** Docker von der eMMC auf die USB-HDD verlegt
+  `/srv/cloud` (data-root `/srv/cloud/docker` + alle DB-Bind-Mounts unter
   `/srv/cloud/appdata/*`), `daemon.json` data-root + `RequiresMountsFor=/srv/cloud`,
-  compose bind paths rewritten. Reboot-tested (auto-mount + all 6 containers
-  auto-start). Originals kept on the eMMC as a safety net (not yet deleted).
-- **Hub watcher deploy:** installed uv (`~/.local/bin`); transferred this repo from
-  the workstation WSL via a tarball (the GitHub repo is **private** → a hub
-  `git clone` failed for lack of credentials); `uv sync`; wrote
-  `/home/charlie/.config/vault_watcher/env` (mode 600, **reused the workstation's
-  GEMINI_API_KEY**) with the `/srv/cloud/*` paths; `loginctl enable-linger charlie`
-  (worked **without sudo**); linked + enabled + started
-  `obsidian-inbox-watcher.hub.service` (user unit).
-- **E2E test passed:** a `.txt` in `/srv/cloud/inbox/raw` became a
-  `domain`-frontmatter note in `/srv/cloud/vault/notes/inbox` in ~16 s (inotify on
-  ext4); original archived. Test artifacts cleaned up.
+  Compose-Bind-Pfade umgeschrieben. Reboot-getestet (Auto-Mount + alle 6 Container
+  Auto-Start). Originale als Safety-Net auf der eMMC behalten (noch nicht gelöscht).
+- **Hub-Watcher-Deploy:** uv installiert (`~/.local/bin`); dieses Repo von der
+  Workstation-WSL via Tarball übertragen (das GitHub-Repo ist **privat** → ein Hub-
+  `git clone` scheiterte mangels Credentials); `uv sync`;
+  `/home/charlie/.config/vault_watcher/env` geschrieben (Mode 600, **GEMINI_API_KEY der
+  Workstation wiederverwendet**) mit den `/srv/cloud/*`-Pfaden; `loginctl enable-linger charlie`
+  (funktionierte **ohne sudo**); `obsidian-inbox-watcher.hub.service` verlinkt + enabled
+  + gestartet (User-Unit).
+- **E2E-Test bestanden:** ein `.txt` in `/srv/cloud/inbox/raw` wurde zu einer
+  `domain`-Frontmatter-Notiz in `/srv/cloud/vault/notes/inbox` in ~16 s (inotify auf
+  ext4); Original archiviert. Test-Artefakte aufgeräumt.
 
-## In progress
-- Nothing in flight. Service is `active (running)` + `enabled`.
+## In Arbeit
+- Nichts in Bearbeitung. Service ist `active (running)` + `enabled`.
 
-## Next concrete step (operator, on the hub)
-- **DONE 2026-06-06 — vault Syncthing sync:** `titan-vault` shares hub
-  `/srv/cloud/vault` ↔ workstation `F:\vault` (bidirectional, `.stignore` excludes
-  `.git`/`.obsidian` caches). Verified both ways. Hub & workstation were already
-  paired devices; workstation runs SyncTrayzor (autostart already set). Hub syncthing
-  is the Docker container — it needed a new bind mount
-  `/srv/cloud/vault:/var/syncthing/titan-vault`. The personal `Obsidian-KI-Vault`
-  share (`C:\Users\charl\Documents\Obsidian`) is separate and was left untouched.
-- **NEXT: raw-input path** to `/srv/cloud/inbox/raw`. The Telegram capture service
-  (Appendix A) runs on the hub and writes raw files directly (no Syncthing). For
-  phone/laptop drops via Syncthing, mind the receive-only "hub consumes files"
-  subtlety (the watcher moves files out of raw → a receive-only folder then shows
-  "locally changed"). Design this before wiring it.
-- Then **restic backups** to the H100 NAS (needs sudo + NFS/SMB details). Note: the
-  hub's Syncthing vault mirror is an off-machine *copy*, not a real backup (deletes
-  propagate) — restic is still needed.
-- **Cleanup:** delete the eMMC Docker originals (~10 G: `/var/lib/docker`,
-  `/data/mysql`, old `docker/*` bind dirs) + dangling volumes `38a0ee…`, `n8n_data`.
+## Nächster konkreter Schritt (Operator, auf dem Hub)
+- **ERLEDIGT 2026-06-06 — Vault-Syncthing-Sync:** `titan-vault` teilt Hub
+  `/srv/cloud/vault` ↔ Workstation `F:\vault` (bidirektional, `.stignore` schließt
+  `.git`/`.obsidian`-Caches aus). Beide Richtungen verifiziert. Hub & Workstation waren bereits
+  gepaarte Geräte; Workstation läuft SyncTrayzor (Autostart bereits gesetzt). Hub-Syncthing
+  ist der Docker-Container — er brauchte einen neuen Bind-Mount
+  `/srv/cloud/vault:/var/syncthing/titan-vault`. Der persönliche `Obsidian-KI-Vault`-
+  Share (`C:\Users\charl\Documents\Obsidian`) ist separat und blieb unberührt.
+- **NÄCHSTES: Roh-Input-Pfad** zu `/srv/cloud/inbox/raw`. Der Telegram-Capture-Service
+  (Anhang A) läuft auf dem Hub und schreibt Roh-Dateien direkt (kein Syncthing). Für
+  Phone-/Laptop-Drops via Syncthing die receive-only „Hub konsumiert Dateien"-
+  Feinheit beachten (der Watcher schiebt Dateien aus raw heraus → ein receive-only-Ordner zeigt
+  dann „locally changed"). Das vor dem Verdrahten entwerfen.
+- Dann **restic-Backups** zum H100-NAS (braucht sudo + NFS/SMB-Details). Hinweis: der
+  Syncthing-Vault-Spiegel des Hubs ist eine Off-Machine-*Kopie*, kein echtes Backup (Löschungen
+  propagieren) — restic wird weiterhin benötigt.
+- **Cleanup:** die eMMC-Docker-Originale löschen (~10 G: `/var/lib/docker`,
+  `/data/mysql`, alte `docker/*`-Bind-Verzeichnisse) + verwaiste Volumes `38a0ee…`, `n8n_data`.
 
-## Open questions / decisions needed
-- Workstation Syncthing topology (above).
-- restic: H100 over NFS or SMB, mount path, credentials.
-- WI-4 stays deferred (re-confirmed this session).
+## Offene Fragen / nötige Entscheidungen
+- Workstation-Syncthing-Topologie (oben).
+- restic: H100 über NFS oder SMB, Mount-Pfad, Credentials.
+- WI-4 bleibt zurückgestellt (diese Sitzung erneut bestätigt).
 
-## Files the next session must read first
+## Dateien, die die nächste Sitzung zuerst lesen muss
 - docs/ai/plans/2026-05-29-hub-migration-and-resilience.md
 - docs/ai/CURRENT_TASK.md, docs/ai/DECISIONS.md, src/obsidian_inbox_watcher/main.py
 
-## Notes / gotchas discovered
-- **Hub deployment needs NO sudo:** `enable-linger` worked without it, and
-  `systemctl --user` works over SSH with `XDG_RUNTIME_DIR=/run/user/$(id -u)`.
-- The GitHub repo is **private** and the hub has no creds → deploy by transferring
-  the repo from the workstation, not `git clone`. Future hub updates need a PAT /
-  deploy key, or another tarball push.
-- **Workstation WSL networking** often falls back to `networkingMode None` (no net
-  in WSL → cannot push from WSL); fix with `wsl --shutdown` then restart.
-- Hub access: a local SSH shortcut script → `ssh <hub-user>@<hub-ip>`.
-- Hub env paths (absolute, systemd doesn't expand `~`): see deploy/README.md hub section.
+## Notizen / entdeckte Stolperfallen
+- **Hub-Deployment braucht KEIN sudo:** `enable-linger` funktionierte ohne, und
+  `systemctl --user` funktioniert über SSH mit `XDG_RUNTIME_DIR=/run/user/$(id -u)`.
+- Das GitHub-Repo ist **privat** und der Hub hat keine Credentials → Deploy durch Übertragen
+  des Repos von der Workstation, nicht `git clone`. Künftige Hub-Updates brauchen einen PAT /
+  Deploy-Key oder einen weiteren Tarball-Push.
+- **Workstation-WSL-Networking** fällt oft auf `networkingMode None` zurück (kein Netz
+  in WSL → kann nicht aus WSL pushen); Fix mit `wsl --shutdown` und dann Neustart.
+- Hub-Zugriff: lokales SSH-Shortcut-Skript → `ssh <hub-user>@<hub-ip>`.
+- Hub-Env-Pfade (absolut, systemd expandiert `~` nicht): siehe deploy/README.md Hub-Abschnitt.

@@ -1,88 +1,88 @@
-# Decisions Log
+# Entscheidungs-Log
 
-> Architecture Decision Records. Append-only. One entry per significant decision.
-> This prevents re-litigating the same questions in every new AI session.
+> Architecture Decision Records. Nur anhängen. Ein Eintrag pro signifikanter Entscheidung.
+> Das verhindert, dieselben Fragen in jeder neuen KI-Sitzung neu auszufechten.
 
 ---
 
-## 2026-05-20: Use uv as package manager
-**Decision:** uv (over pip+venv, poetry, pdm).
-**Reasoning:** 10-100x faster than pip; unified tool replacing pip, pip-tools, virtualenv, pyenv; lockfile by default; backed by Astral (same team as ruff).
-**Alternatives considered:** Poetry (slower, more config overhead, separate from venv tooling). pip+venv (no lockfile by default, manual workflow).
-**Consequences:** All dependency operations go through `uv add` / `uv remove` / `uv sync`. Never edit pyproject.toml dependencies manually.
+## 2026-05-20: uv als Paketmanager verwenden
+**Entscheidung:** uv (statt pip+venv, poetry, pdm).
+**Begründung:** 10–100× schneller als pip; vereintes Werkzeug, das pip, pip-tools, virtualenv, pyenv ersetzt; Lockfile standardmäßig; getragen von Astral (dasselbe Team wie ruff).
+**Erwogene Alternativen:** Poetry (langsamer, mehr Konfigurationsaufwand, getrennt vom venv-Tooling). pip+venv (kein Lockfile by default, manueller Workflow).
+**Konsequenzen:** Alle Dependency-Operationen laufen über `uv add` / `uv remove` / `uv sync`. Niemals pyproject.toml-Abhängigkeiten manuell bearbeiten.
 
-## 2026-05-20: Use ruff for lint and format
-**Decision:** ruff replaces black + flake8 + isort + pyupgrade.
-**Reasoning:** Single tool, much faster, consistent config, actively maintained.
-**Consequences:** Don't add black, flake8, or isort as separate tools.
+## 2026-05-20: ruff für Lint und Format verwenden
+**Entscheidung:** ruff ersetzt black + flake8 + isort + pyupgrade.
+**Begründung:** Einzelwerkzeug, deutlich schneller, konsistente Konfiguration, aktiv gepflegt.
+**Konsequenzen:** black, flake8 oder isort nicht als separate Werkzeuge ergänzen.
 
-## 2026-05-20: Mypy strict mode
-**Decision:** Mypy in strict mode from day one.
-**Reasoning:** Strictness is much easier to enforce from the start than retrofit. Catches whole categories of bugs at write-time.
-**Consequences:** Every function needs full type hints. `# type: ignore` requires an inline comment explaining why.
+## 2026-05-20: Mypy Strict Mode
+**Entscheidung:** Mypy im Strict Mode ab Tag eins.
+**Begründung:** Striktheit ist von Anfang an viel leichter durchzusetzen als nachzurüsten. Fängt ganze Bug-Kategorien zur Schreibzeit ab.
+**Konsequenzen:** Jede Funktion braucht vollständige Type-Hints. `# type: ignore` erfordert einen Inline-Kommentar mit Begründung.
 
-## 2026-05-20: Migrate from flat directory to package-based layout
-**Decision:** Ported initial prototype scripts (`watcher.py` & `test_watcher.py`) into the highly structured Python workspace `obsidian-inbox-watcher` cloned from the `python-template` repository.
-**Reasoning:** Allows clean distribution, test separation, dependency encapsulation via Astral's `uv`, unified configurations (`pyproject.toml`), and local packaging support (editable installation via `make install`).
-**Alternatives considered:** Keeping the project as flat scripts (leads to dependency pollution, linting issues, fragile test paths, and lacks strict developer gates).
-**Consequences:** The code is fully structured inside the `src/obsidian_inbox_watcher` package and is fully compliant with PEP-8 formatting and static check standards.
+## 2026-05-20: Vom flachen Verzeichnis zum paketbasierten Layout migrieren
+**Entscheidung:** Erste Prototyp-Skripte (`watcher.py` & `test_watcher.py`) in den hochstrukturierten Python-Workspace `obsidian-inbox-watcher` portiert, geklont aus dem `python-template`-Repository.
+**Begründung:** Ermöglicht saubere Distribution, Test-Trennung, Dependency-Kapselung via Astrals `uv`, vereinte Konfigurationen (`pyproject.toml`) und lokale Packaging-Unterstützung (editierbare Installation via `make install`).
+**Erwogene Alternativen:** Das Projekt als flache Skripte belassen (führt zu Dependency-Verschmutzung, Linting-Problemen, fragilen Test-Pfaden und es fehlen strikte Developer-Gates).
+**Konsequenzen:** Der Code ist vollständig innerhalb des Pakets `src/obsidian_inbox_watcher` strukturiert und vollständig konform mit PEP-8-Formatting und statischen Check-Standards.
 
-## 2026-05-20: Configuration file for environment secrets
-**Decision:** Place API keys and credentials in `~/.config/vault_watcher/env` instead of hardcoding or requiring global system environment exports.
-**Reasoning:** Systemd user-level services can easily read clean `EnvironmentFile=` files. This completely isolates private API keys from getting tracked inside Git histories.
-**Alternatives considered:** Injecting keys via command-line arguments (insecure as they appear in system process lists), or standard environment variables (requires exporting in multiple shells and isn't captured by systemd automatically).
-**Consequences:** The environment file must be created on any target PC before activating the systemd service.
+## 2026-05-20: Konfigurationsdatei für Environment-Secrets
+**Entscheidung:** API-Keys und Credentials in `~/.config/vault_watcher/env` ablegen, statt sie hartzucodieren oder globale System-Environment-Exporte zu verlangen.
+**Begründung:** systemd-User-Level-Services können saubere `EnvironmentFile=`-Dateien leicht lesen. Das isoliert private API-Keys vollständig davor, in Git-Historien getrackt zu werden.
+**Erwogene Alternativen:** Keys via Kommandozeilen-Argumente injizieren (unsicher, da sie in System-Prozesslisten erscheinen) oder Standard-Umgebungsvariablen (erfordert Exportieren in mehreren Shells und wird von systemd nicht automatisch erfasst).
+**Konsequenzen:** Die Environment-Datei muss auf jedem Ziel-PC erstellt werden, bevor der systemd-Service aktiviert wird.
 
-## 2026-05-21: Make the raw/processed/archive dirs env-configurable
-**Decision:** Read the three working directories from `VAULT_WATCHER_RAW_DIR` / `VAULT_WATCHER_PROCESSED_DIR` / `VAULT_WATCHER_ARCHIVE_DIR` (with the previous `~/0_Pipeline/*` values as defaults), and load `~/.config/vault_watcher/env` into `os.environ` at startup. `InboxHandler` now carries the processed/archive dirs and forwards them to `process_file`.
-**Reasoning:** The paths were hardcoded in `main()` and the event handler called `process_file` without overrides, so output could not be redirected without editing code. Configurability is required to point the output into Titan's vault.
-**Alternatives considered:** Symlinking `~/0_Pipeline/Out` into the vault (hidden, fragile across machines); editing paths in code per machine (not portable).
-**Consequences:** Deployment is configured via the systemd `EnvironmentFile`; defaults keep standalone use unchanged.
+## 2026-05-21: Die Roh-/Processed-/Archiv-Verzeichnisse env-konfigurierbar machen
+**Entscheidung:** Die drei Arbeitsverzeichnisse aus `VAULT_WATCHER_RAW_DIR` / `VAULT_WATCHER_PROCESSED_DIR` / `VAULT_WATCHER_ARCHIVE_DIR` lesen (mit den bisherigen `~/0_Pipeline/*`-Werten als Defaults) und `~/.config/vault_watcher/env` beim Start in `os.environ` laden. `InboxHandler` trägt jetzt die Processed-/Archiv-Verzeichnisse und reicht sie an `process_file` weiter.
+**Begründung:** Die Pfade waren in `main()` hartcodiert und der Event-Handler rief `process_file` ohne Overrides auf, sodass der Output nicht ohne Code-Änderung umgeleitet werden konnte. Konfigurierbarkeit ist erforderlich, um den Output in Titans Vault zu leiten.
+**Erwogene Alternativen:** `~/0_Pipeline/Out` in den Vault symlinken (versteckt, fragil über Maschinen hinweg); Pfade im Code pro Maschine editieren (nicht portabel).
+**Konsequenzen:** Das Deployment wird über die systemd-`EnvironmentFile` konfiguriert; Defaults lassen die Standalone-Nutzung unverändert.
 
-## 2026-05-21: Write processed notes into Titan's vault for auto-ingestion
-**Decision:** Set `VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox` so generated notes land inside Titan's `VAULT_ROOT`, where `brain-watcher` picks them up and ingests them into Titan/Qdrant.
-**Reasoning:** Makes this watcher the PDF/DOCX/URL → Markdown front end to the RAG system, closing the gap that brain-watcher only auto-ingests `.md` (PDFs otherwise need a manual CLI step). Integration is via the shared filesystem only — the two services stay independent.
-**Alternatives considered:** Calling Titan's `/ingest/file` HTTP API directly from this watcher (tighter coupling, duplicate retry/auth logic); leaving the pipelines disconnected (manual copy step).
-**Consequences:** Raw and archive dirs must stay *outside* `/mnt/f/vault` so raw inputs aren't indexed. brain-watcher's recursive polling observer handles the `/mnt` mount.
+## 2026-05-21: Processed-Notizen für Auto-Ingestion in Titans Vault schreiben
+**Entscheidung:** `VAULT_WATCHER_PROCESSED_DIR=/mnt/f/vault/notes/inbox` setzen, sodass generierte Notizen innerhalb von Titans `VAULT_ROOT` landen, wo `brain-watcher` sie aufnimmt und in Titan/Qdrant ingestet.
+**Begründung:** Macht diesen Watcher zum PDF/DOCX/URL → Markdown-Frontend zum RAG-System und schließt die Lücke, dass brain-watcher nur `.md` automatisch ingestet (PDFs brauchen sonst einen manuellen CLI-Schritt). Die Integration läuft nur über das gemeinsame Dateisystem — die beiden Services bleiben unabhängig.
+**Erwogene Alternativen:** Titans `/ingest/file`-HTTP-API direkt aus diesem Watcher aufrufen (engere Kopplung, duplizierte Retry-/Auth-Logik); die Pipelines unverbunden lassen (manueller Kopierschritt).
+**Konsequenzen:** Roh- und Archiv-Verzeichnisse müssen *außerhalb* von `/mnt/f/vault` bleiben, damit Roh-Inputs nicht indexiert werden. brain-watchers rekursiver Polling-Observer behandelt den `/mnt`-Mount.
 
-## 2026-05-21: Raw inbox on the Windows drive + polling observer
-**Decision:** Put the raw drop folder on the Windows drive (`/mnt/f/0_Pipeline/In`, with archive at `/mnt/f/0_Pipeline/Archive`) and add `select_observer()` that returns a `PollingObserver` for `/mnt/*` paths and a native `Observer` elsewhere.
-**Reasoning:** The user drops files from Windows Explorer, so the inbox must be a Windows-visible folder. But inotify events are not delivered on the drvfs (`/mnt`) mount, so the default observer would never fire `on_created` — only the startup scan would work. Polling fixes detection (same approach brain-watcher already uses for the vault).
-**Alternatives considered:** Keeping the inbox in the WSL home (`~/0_Pipeline/In`) with inotify (fast, but awkward to reach from Windows); a Windows-side watcher (separate runtime).
-**Consequences:** Slightly higher CPU from polling; detection latency ~1–2 s. Linux-home inboxes still use inotify automatically.
+## 2026-05-21: Roh-Inbox auf dem Windows-Laufwerk + Polling-Observer
+**Entscheidung:** Den Roh-Drop-Ordner auf das Windows-Laufwerk legen (`/mnt/f/0_Pipeline/In`, mit Archiv unter `/mnt/f/0_Pipeline/Archive`) und `select_observer()` ergänzen, das für `/mnt/*`-Pfade einen `PollingObserver` und sonst einen nativen `Observer` zurückgibt.
+**Begründung:** Der Nutzer legt Dateien aus dem Windows-Explorer ab, daher muss die Inbox ein Windows-sichtbarer Ordner sein. Aber inotify-Events werden auf dem drvfs-(`/mnt`)-Mount nicht zugestellt, sodass der Default-Observer nie `on_created` feuern würde — nur der Startup-Scan würde funktionieren. Polling behebt die Erkennung (derselbe Ansatz, den brain-watcher bereits für den Vault nutzt).
+**Erwogene Alternativen:** Die Inbox im WSL-Home (`~/0_Pipeline/In`) mit inotify belassen (schnell, aber von Windows aus umständlich erreichbar); ein Windows-seitiger Watcher (separate Laufzeit).
+**Konsequenzen:** Etwas höhere CPU durch Polling; Erkennungslatenz ~1–2 s. Linux-Home-Inboxen nutzen weiterhin automatisch inotify.
 
-## 2026-05-21: Emit Titan-compatible frontmatter with a dynamic `domain`
-**Decision:** Replace the fixed `category` (4 hardcoded projects) with a `domain` frontmatter field. Gemini receives a seed list of existing Titan domains (`VAULT_WATCHER_DOMAINS`, default `business,lernen,projekte,system`) and chooses the best fit or invents a new concise domain; the value is run through `normalize_domain()` (lowercase, space-free).
-**Reasoning:** Titan's `read_markdown` **requires** a non-empty `domain` field and filters on it exactly in Qdrant — the old notes (with only `category`) would have been rejected at ingest. Seeding the known domains keeps the graph consistent while still allowing growth.
-**Alternatives considered:** Fetching the live domain list from Titan's `/domains` per file (tighter coupling + a failure mode when Titan is down; the endpoint was also unreachable during setup); keeping the fixed 4 categories (rejected by Titan).
-**Consequences:** Domains must be normalized consistently (casing/spacing matters for the Qdrant filter). The seed list can drift from Titan's real domains, but new-domain creation + the env override keep it manageable.
+## 2026-05-21: Titan-kompatibles Frontmatter mit dynamischer `domain` emittieren
+**Entscheidung:** Die feste `category` (4 hartcodierte Projekte) durch ein `domain`-Frontmatter-Feld ersetzen. Gemini erhält eine Seed-Liste bestehender Titan-Domains (`VAULT_WATCHER_DOMAINS`, Default `business,lernen,projekte,system`) und wählt die beste Passung oder erfindet eine neue prägnante Domain; der Wert läuft durch `normalize_domain()` (kleingeschrieben, leerzeichenfrei).
+**Begründung:** Titans `read_markdown` **verlangt** ein nicht-leeres `domain`-Feld und filtert in Qdrant exakt darauf — die alten Notizen (nur mit `category`) wären beim Ingest abgelehnt worden. Das Seeden der bekannten Domains hält den Graphen konsistent und erlaubt dennoch Wachstum.
+**Erwogene Alternativen:** Die Live-Domain-Liste pro Datei aus Titans `/domains` holen (engere Kopplung + ein Failure-Mode, wenn Titan unten ist; der Endpunkt war beim Setup auch unerreichbar); die festen 4 Kategorien behalten (von Titan abgelehnt).
+**Konsequenzen:** Domains müssen konsistent normalisiert werden (Groß-/Kleinschreibung/Leerzeichen sind für den Qdrant-Filter relevant). Die Seed-Liste kann von Titans realen Domains abdriften, aber Neu-Domain-Erstellung + das Env-Override halten es handhabbar.
 
-## 2026-05-29: Select the watchdog observer by filesystem type, not a path prefix
-**Decision:** Replace the `watch_dir.startswith("/mnt/")` heuristic in `select_observer()` with a `/proc/mounts` lookup (`_filesystem_type()`): treat `drvfs`, `9p`, `cifs`, `smbfs`, `nfs`, `nfs4`, `fuse.sshfs` as polling filesystems and use native inotify everywhere else. Fall back to the old `/mnt` prefix only when the type cannot be read.
-**Reasoning:** The always-on hub mounts its raw inbox on a native ext4 USB SSD *outside* `/mnt` (`/srv/cloud`), where inotify works — the path heuristic would have forced needless polling there, and conversely it would have used inotify on a network share mounted outside `/mnt` where events are unreliable. Keying on the actual filesystem type is correct regardless of mount point.
-**Alternatives considered:** Keep the `/mnt` string heuristic and simply require the SSD outside `/mnt` (fragile — silently wrong for shares or an ext4 path under `/mnt`); a config flag to force polling (more config surface than an automatic check).
-**Consequences:** `select_observer()` now reads `/proc/mounts` (Linux-only, the sole target). The WSL workstation's `/mnt/f` is `9p` → still polling; the hub's `/srv/cloud` is `ext4` → inotify. Tests monkeypatch `_filesystem_type` so observer selection is deterministic across CI environments.
+## 2026-05-29: Den watchdog-Observer nach Dateisystem-Typ wählen, nicht nach Pfad-Präfix
+**Entscheidung:** Die `watch_dir.startswith("/mnt/")`-Heuristik in `select_observer()` durch einen `/proc/mounts`-Lookup (`_filesystem_type()`) ersetzen: `drvfs`, `9p`, `cifs`, `smbfs`, `nfs`, `nfs4`, `fuse.sshfs` als Polling-Dateisysteme behandeln und überall sonst natives inotify nutzen. Nur auf den alten `/mnt`-Präfix zurückfallen, wenn der Typ nicht gelesen werden kann.
+**Begründung:** Der Always-on-Hub mountet seine Roh-Inbox auf einer nativen ext4-USB-SSD *außerhalb* von `/mnt` (`/srv/cloud`), wo inotify funktioniert — die Pfad-Heuristik hätte dort unnötiges Polling erzwungen, und umgekehrt hätte sie inotify auf einem außerhalb von `/mnt` gemounteten Netzwerk-Share genutzt, wo Events unzuverlässig sind. Auf den tatsächlichen Dateisystem-Typ abzustellen ist unabhängig vom Mountpoint korrekt.
+**Erwogene Alternativen:** Die `/mnt`-String-Heuristik behalten und einfach die SSD außerhalb von `/mnt` verlangen (fragil — still falsch für Shares oder einen ext4-Pfad unter `/mnt`); ein Config-Flag zum Erzwingen von Polling (mehr Config-Oberfläche als ein automatischer Check).
+**Konsequenzen:** `select_observer()` liest jetzt `/proc/mounts` (nur Linux, das einzige Ziel). Das `/mnt/f` der WSL-Workstation ist `9p` → weiterhin Polling; das `/srv/cloud` des Hubs ist `ext4` → inotify. Tests monkeypatchen `_filesystem_type`, sodass die Observer-Wahl über CI-Umgebungen hinweg deterministisch ist.
 
-## 2026-05-29: Retry transient Gemini/network failures and dead-letter poison inputs
-**Decision:** Wrap the Gemini call (`_generate_note_json`) and URL fetch (`_http_get`) in a shared tenacity policy (`stop_after_attempt(5)`, `wait_exponential(max=30)`, `reraise=True`) gated by `_is_transient()` — only timeouts, connection errors, HTTP 429, and 5xx are retried. Any input that can't be turned into a note (unsupported format, empty text, extraction failure, exhausted retries, invalid JSON, unexpected error) is moved to a new `failed_dir` (`VAULT_WATCHER_FAILED_DIR`, default `~/0_Pipeline/Failed`) with a `<name>.error.txt` sidecar instead of being left in the inbox. A missing API key is treated as config, not poison: the file stays put for a later run.
-**Reasoning:** Before this, a single transient API blip dropped a file silently, and a permanently-bad file (corrupt PDF, 403 URL) was retried on every restart, blocking the queue and spamming the journal. Dead-lettering gets poison files out of the hot path while preserving them for inspection; bounded backoff rides out real outages without hammering the API.
-**Alternatives considered:** Retrying everything (turns a permanent 400 into 5 slow failures); deleting unprocessable files (loses the original + the reason); an in-memory retry counter (lost across restarts, unlike a filesystem move).
-**Consequences:** `InboxHandler`, `process_existing_files`, and `process_file` all take a `failed_dir`; `main()` resolves and pre-creates it. The sidecar holds only timestamp/reason/short-detail — full tracebacks go to the journal via `logger.exception`. Operators must occasionally drain `failed_dir`. tenacity is a new dependency.
+## 2026-05-29: Transiente Gemini-/Netzwerk-Fehler wiederholen und Poison-Inputs dead-lettern
+**Entscheidung:** Den Gemini-Call (`_generate_note_json`) und URL-Fetch (`_http_get`) in eine gemeinsame tenacity-Policy wickeln (`stop_after_attempt(5)`, `wait_exponential(max=30)`, `reraise=True`), gegated durch `_is_transient()` — nur Timeouts, Connection-Errors, HTTP 429 und 5xx werden wiederholt. Jeder Input, der nicht zu einer Notiz werden kann (nicht unterstütztes Format, leerer Text, Extraktionsfehler, erschöpfte Retries, ungültiges JSON, unerwarteter Fehler), wird in ein neues `failed_dir` (`VAULT_WATCHER_FAILED_DIR`, Default `~/0_Pipeline/Failed`) verschoben mit einem `<name>.error.txt`-Sidecar, statt in der Inbox zu verbleiben. Ein fehlender API-Key wird als Config behandelt, nicht als Poison: die Datei bleibt für einen späteren Lauf an Ort und Stelle.
+**Begründung:** Davor ließ ein einzelner transienter API-Aussetzer eine Datei still fallen, und eine dauerhaft schlechte Datei (korruptes PDF, 403-URL) wurde bei jedem Neustart wiederholt, blockierte die Queue und spammte das Journal. Dead-Lettering holt Poison-Dateien aus dem Hot-Path, bewahrt sie aber zur Inspektion; begrenztes Backoff übersteht echte Ausfälle, ohne die API zu hämmern.
+**Erwogene Alternativen:** Alles wiederholen (macht aus einem dauerhaften 400 fünf langsame Fehlschläge); unverarbeitbare Dateien löschen (verliert Original + Grund); ein In-Memory-Retry-Zähler (über Neustarts verloren, anders als ein Dateisystem-Move).
+**Konsequenzen:** `InboxHandler`, `process_existing_files` und `process_file` nehmen alle ein `failed_dir`; `main()` löst es auf und legt es vorab an. Das Sidecar enthält nur Zeitstempel/Grund/Kurzdetail — vollständige Tracebacks gehen via `logger.exception` ins Journal. Operatoren müssen `failed_dir` gelegentlich leeren. tenacity ist eine neue Abhängigkeit.
 
-## 2026-05-29: Never overwrite an existing processed note
-**Decision:** Route the output path through `unique_output_path(directory, filename)`, which appends `_v2`, `_v3`, ... before the extension when the target already exists.
-**Reasoning:** The note name is `{date}_{title}.md`, and Gemini can produce the same title for two different inputs on the same day. The old code opened that path with `"w"`, silently destroying the earlier note (and its source was already archived, so it was unrecoverable).
-**Alternatives considered:** Hashing the content into the name (ugly, unstable across re-runs); appending a timestamp always (noisy for the common no-collision case); skipping the write on collision (drops data — the opposite failure).
-**Consequences:** Collisions now create sibling `_v2` notes the user can merge or delete. Archive collision handling (timestamp suffix on the raw file) is unchanged.
+## 2026-05-29: Niemals eine bestehende Processed-Notiz überschreiben
+**Entscheidung:** Den Ausgabepfad durch `unique_output_path(directory, filename)` leiten, das `_v2`, `_v3`, … vor der Erweiterung anhängt, wenn das Ziel bereits existiert.
+**Begründung:** Der Notiz-Name ist `{date}_{title}.md`, und Gemini kann am selben Tag für zwei verschiedene Inputs denselben Titel erzeugen. Der alte Code öffnete diesen Pfad mit `"w"` und zerstörte still die frühere Notiz (und deren Quelle war bereits archiviert, sie war also unwiederbringlich).
+**Erwogene Alternativen:** Den Inhalt in den Namen hashen (hässlich, instabil über Re-Runs); immer einen Zeitstempel anhängen (laut für den häufigen Nicht-Kollisions-Fall); den Schreibvorgang bei Kollision überspringen (verliert Daten — der gegenteilige Fehler).
+**Konsequenzen:** Kollisionen erzeugen jetzt Geschwister-`_v2`-Notizen, die der Nutzer mergen oder löschen kann. Das Archiv-Kollisions-Handling (Zeitstempel-Suffix auf der Roh-Datei) bleibt unverändert.
 
-## 2026-05-29: Make the prompt length limit configurable and raise the default
-**Decision:** Replace the hardcoded `text_content[:20000]` slice with `get_max_chars()` (`VAULT_WATCHER_MAX_CHARS`, default `200_000`), applied before building the prompt, and log a `WARNING` whenever the text is actually truncated.
-**Reasoning:** 20k chars silently dropped most of any real PDF/article, so summaries were built from the first few pages only — with no signal that anything was lost. gemini-2.5-flash has a very large context window, so 200k is safe and captures whole documents; the env override lets the hub tune it down if cost matters. Logging the truncation makes the lossy case visible instead of silent.
-**Alternatives considered:** No limit at all (unbounded prompt cost / token-limit errors on pathological inputs); chunk-and-map-reduce summarization (much more complex, deferred — see IDEAS); keeping 20k (too small, the original bug).
-**Consequences:** Larger prompts mean higher per-file token cost at the default; operators who care can lower `VAULT_WATCHER_MAX_CHARS`. Non-numeric or non-positive values fall back to the default rather than erroring.
+## 2026-05-29: Das Prompt-Längenlimit konfigurierbar machen und den Default anheben
+**Entscheidung:** Den hartcodierten `text_content[:20000]`-Slice durch `get_max_chars()` (`VAULT_WATCHER_MAX_CHARS`, Default `200_000`) ersetzen, vor dem Bauen des Prompts angewandt, und eine `WARNING` loggen, wann immer der Text tatsächlich gekürzt wird.
+**Begründung:** 20k Zeichen ließen still den Großteil jedes echten PDFs/Artikels fallen, sodass Zusammenfassungen nur aus den ersten paar Seiten gebaut wurden — ohne Signal, dass etwas verloren ging. gemini-2.5-flash hat ein sehr großes Kontextfenster, also ist 200k sicher und erfasst ganze Dokumente; das Env-Override lässt den Hub es heruntertunen, wenn Kosten zählen. Das Loggen der Kürzung macht den verlustbehafteten Fall sichtbar statt still.
+**Erwogene Alternativen:** Gar kein Limit (unbegrenzte Prompt-Kosten / Token-Limit-Fehler bei pathologischen Inputs); Chunk-and-Map-Reduce-Zusammenfassung (viel komplexer, zurückgestellt — siehe IDEAS); 20k behalten (zu klein, der ursprüngliche Bug).
+**Konsequenzen:** Größere Prompts bedeuten höhere Per-Datei-Token-Kosten beim Default; Operatoren, denen das wichtig ist, können `VAULT_WATCHER_MAX_CHARS` senken. Nicht-numerische oder nicht-positive Werte fallen auf den Default zurück, statt zu erroren.
 
-## 2026-05-29: Two-tier hub deployment with Syncthing-decoupled raw/vault folders
-**Decision:** Add a second systemd user unit `deploy/obsidian-inbox-watcher.hub.service` (user `charlie`, `After=/Wants=network-online.target`, `StartLimitIntervalSec=0`) for the always-on Mini-PC, keeping the WSL `…​.service` (user `charl`) for the workstation. On the hub the SSD mounts at `/srv/cloud` with `inbox/raw` + `vault` as Syncthing folders and `archive` + `failed` (+ a future `processing`) **local-only**. Config + docs only — the actual `systemctl`/key/SSD steps are the operator's, done on the hub.
-**Reasoning:** The workstation must be awake to accept and process input; an always-on hub removes that. The two hosts have genuinely different units (user, paths, network-wait), so a single unit can't serve both. Syncthing replaces the `/mnt/f` shared mount: it mirrors `vault/` back to the workstation where brain-watcher still feeds Titan, while raw/archive/failed stay off the synced vault so Titan never indexes raw inputs. The hub's native ext4 + Syncthing rename delivery are exactly what WI-1 (`on_moved`) and WI-1b (fs-type observer) were built for.
-**Alternatives considered:** One parametrized unit with `%i`/templating (more moving parts than two tiny files); NFS-mounting the workstation vault on the hub (couples the two boxes; breaks when the workstation is off — the thing we're fixing); running the capture/Telegram piece in this repo (rejected — kept as a sibling service, see the plan's Appendix A).
-**Consequences:** Deploying to a new host means picking the right unit and writing the env file with absolute paths. `VAULT_WATCHER_PROCESSING_DIR` (WI-4) is documented but not yet implemented — WI-4 was deferred (see IDEAS). The Telegram capture service lives in its own repo.
+## 2026-05-29: Zweistufiges Hub-Deployment mit Syncthing-entkoppelten Roh-/Vault-Ordnern
+**Entscheidung:** Eine zweite systemd-User-Unit `deploy/obsidian-inbox-watcher.hub.service` (Nutzer `charlie`, `After=/Wants=network-online.target`, `StartLimitIntervalSec=0`) für den Always-on-Mini-PC ergänzen, die WSL-`…​.service` (Nutzer `charl`) für die Workstation behalten. Auf dem Hub mountet die SSD unter `/srv/cloud` mit `inbox/raw` + `vault` als Syncthing-Ordnern und `archive` + `failed` (+ einem künftigen `processing`) **nur lokal**. Nur Config + Docs — die eigentlichen `systemctl`/Key/SSD-Schritte gehören dem Operator, ausgeführt auf dem Hub.
+**Begründung:** Die Workstation muss wach sein, um Input anzunehmen und zu verarbeiten; ein Always-on-Hub beseitigt das. Die zwei Hosts haben tatsächlich unterschiedliche Units (Nutzer, Pfade, Network-Wait), sodass eine einzelne Unit nicht beiden dienen kann. Syncthing ersetzt den `/mnt/f`-Shared-Mount: es spiegelt `vault/` zurück zur Workstation, wo brain-watcher weiterhin Titan füttert, während raw/archive/failed vom synchronisierten Vault fernbleiben, sodass Titan nie Roh-Inputs indexiert. Das native ext4 des Hubs + Syncthings Rename-Zustellung sind genau das, wofür WI-1 (`on_moved`) und WI-1b (fs-Typ-Observer) gebaut wurden.
+**Erwogene Alternativen:** Eine parametrisierte Unit mit `%i`/Templating (mehr bewegliche Teile als zwei winzige Dateien); den Workstation-Vault per NFS auf dem Hub mounten (koppelt die beiden Boxen; bricht, wenn die Workstation aus ist — genau das, was wir beheben); das Capture-/Telegram-Stück in diesem Repo betreiben (verworfen — als Schwester-Service gehalten, siehe Anhang A des Plans).
+**Konsequenzen:** Ein Deployment auf einen neuen Host bedeutet, die richtige Unit zu wählen und die Env-Datei mit absoluten Pfaden zu schreiben. `VAULT_WATCHER_PROCESSING_DIR` (WI-4) ist dokumentiert, aber noch nicht implementiert — WI-4 wurde zurückgestellt (siehe IDEAS). Der Telegram-Capture-Service lebt in seinem eigenen Repo.

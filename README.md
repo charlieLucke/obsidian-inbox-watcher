@@ -1,168 +1,169 @@
 # obsidian-inbox-watcher
 
-**A local folder watcher that turns dropped documents into structured Obsidian
-notes with an LLM (Google Gemini) — the document front end to a local RAG system.**
+**Ein lokaler Ordner-Watcher, der eingeworfene Dokumente mit einem LLM (Google
+Gemini) automatisch in strukturierte Obsidian-Notizen verwandelt — das
+Dokument-Frontend zu einem lokalen RAG-System.**
 
-It watches a raw inbox for **TXT / PDF / DOCX / `.url`** files, extracts the text
-(crawling the page for URLs), classifies and summarizes it with `gemini-2.5-flash`,
-writes a clean Markdown note (YAML frontmatter, action items, open questions) and
-archives the original. Anything it can't process is set aside with an error note
-instead of being retried forever.
+Er überwacht eine Roh-Inbox auf **TXT- / PDF- / DOCX- / `.url`**-Dateien,
+extrahiert den Text (crawlt bei URLs die Seite), klassifiziert und fasst ihn mit
+`gemini-2.5-flash` zusammen, schreibt eine saubere Markdown-Notiz (YAML-Frontmatter,
+Action Items, offene Fragen) und archiviert das Original. Was nicht verarbeitet
+werden kann, wird mit einer Fehlernotiz beiseitegelegt statt endlos wiederholt.
 
-## What it does
+## Was es macht
 
 ```mermaid
 flowchart LR
-    IN["inbox<br/>TXT / PDF / DOCX / .url"] --> EX["text extraction<br/>(pypdf / python-docx / BeautifulSoup)"]
-    EX --> G["Gemini 2.5-flash<br/>classify + summarize"]
-    G --> NOTE["Obsidian Markdown note<br/>(domain, summary, action items)"]
-    EX -.->|"unprocessable"| FAIL["failed folder<br/>+ .error.txt"]
+    IN["Inbox<br/>TXT / PDF / DOCX / .url"] --> EX["Text-Extraktion<br/>(pypdf / python-docx / BeautifulSoup)"]
+    EX --> G["Gemini 2.5-flash<br/>klassifizieren + zusammenfassen"]
+    G --> NOTE["Obsidian-Markdown-Notiz<br/>(domain, Zusammenfassung, Action Items)"]
+    EX -.->|"unverarbeitbar"| FAIL["Failed-Ordner<br/>+ .error.txt"]
 ```
 
-It runs perfectly **standalone** — it just writes the notes into a folder you
-choose. Optionally it becomes the entry gate of a RAG system: point the output
-folder into the vault of **[titan](https://github.com/charlieLucke/titan)** (the
-local RAG system, separate repo) and the `brain-watcher` auto-indexes every
-generated note and makes it searchable.
+Der Dienst läuft **standalone** — er schreibt die Notizen einfach in einen von dir
+gewählten Ordner. Optional wird er zum Eingangstor eines RAG-Systems: zeigt der
+Ausgabeordner in den Vault von
+**[titan](https://github.com/charlieLucke/titan)** (dem lokalen RAG-System,
+separates Repo), indexiert der `brain-watcher` jede erzeugte Notiz automatisch und
+macht sie durchsuchbar.
 
-## Part of a larger system
+## Teil eines größeren Systems
 
-This watcher closes the gap that the RAG system only auto-ingests `.md` files by
-default — PDFs, DOCX and web links would otherwise need manual steps.
+Dieser Watcher schließt die Lücke, dass das RAG-System von Haus aus nur `.md`-Dateien
+automatisch aufnimmt — PDFs, DOCX und Web-Links bräuchten sonst manuelle Schritte.
 
 ```mermaid
 flowchart LR
-    OIW["obsidian-inbox-watcher<br/>documents → notes"]
-    T["titan<br/>RAG engine (index + search)"]
-    BM["brain-mcp<br/>MCP server for Claude"]
+    OIW["obsidian-inbox-watcher<br/>Dokumente → Notizen"]
+    T["titan<br/>RAG-Engine (Index + Suche)"]
+    BM["brain-mcp<br/>MCP-Server für Claude"]
     C(("Claude"))
-    OIW -->|".md notes"| T
+    OIW -->|".md-Notizen"| T
     BM -->|"HTTP: /search, /ingest"| T
-    C <-->|"MCP tools"| BM
+    C <-->|"MCP-Tools"| BM
     classDef here fill:#2b6cb0,stroke:#1a365d,color:#fff,stroke-width:2px;
     class OIW here
 ```
 
-- **obsidian-inbox-watcher** *(you are here)* — raw documents → structured notes.
-- **[titan](https://github.com/charlieLucke/titan)** — indexes the notes and
-  answers search queries (hybrid vector search).
-- **[brain-mcp](https://github.com/charlieLucke/brain-mcp)** — connects titan to
-  Claude over MCP.
+- **obsidian-inbox-watcher** *(du bist hier)* — Rohdokumente → strukturierte Notizen.
+- **[titan](https://github.com/charlieLucke/titan)** — indexiert die Notizen und
+  beantwortet Suchanfragen (hybride Vektorsuche).
+- **[brain-mcp](https://github.com/charlieLucke/brain-mcp)** — bindet titan über
+  MCP an Claude an.
 
-## Technical highlights
+## Technische Highlights
 
-- **Robustness by design:** a stable-size check (only process a file once it has
-  finished writing), bounded retry with exponential backoff for transient
-  Gemini/network failures, and a **dead-letter mechanism** for poison inputs — a
-  corrupt file never blocks the queue.
-- **Filesystem-aware watching:** `select_observer()` picks native inotify vs.
-  polling by the actual filesystem type (from `/proc/mounts`) — needed because
-  inotify is unreliable on WSL `/mnt` mounts and Syncthing delivers files via
-  rename (`on_moved`) rather than create.
-- **No overwriting:** `unique_output_path()` versions collisions (`_v2`, `_v3`), so
-  a note edited in Obsidian is never silently lost.
-- **Decoupled:** the integration with titan runs purely over the shared filesystem
-  — no API coupling, both services stay independent.
+- **Robustheit by design:** Stable-Size-Check (Datei erst verarbeiten, wenn sie
+  fertig geschrieben ist), begrenzter Retry mit exponentiellem Backoff für
+  transiente Gemini-/Netzwerk-Fehler, und ein **Dead-Letter-Mechanismus** für
+  „Poison"-Inputs — eine korrupte Datei blockiert nie die Queue.
+- **Dateisystem-bewusste Überwachung:** `select_observer()` wählt anhand des
+  tatsächlichen Dateisystem-Typs (aus `/proc/mounts`) zwischen nativem inotify und
+  Polling — nötig, weil inotify auf WSL-`/mnt`-Mounts unzuverlässig ist und
+  Syncthing Dateien per Rename (`on_moved`) statt Create zustellt.
+- **Kein Überschreiben:** `unique_output_path()` versioniert Kollisionen (`_v2`,
+  `_v3`), damit eine in Obsidian editierte Notiz nie still verloren geht.
+- **Entkoppelt:** Die Integration mit titan läuft ausschließlich über das gemeinsame
+  Dateisystem — kein API-Coupling, beide Dienste bleiben unabhängig.
 
-## Prerequisites
+## Voraussetzungen
 
-- **Linux or WSL2.** The watcher runs as a systemd user service and reads
-  `/proc/mounts` to pick its watching strategy.
-- **Python 3.12+** and **[uv](https://docs.astral.sh/uv/)**.
-- **A Google Gemini API key** (the free tier is enough to try it) from
+- **Linux oder WSL2.** Der Watcher läuft als systemd-User-Service und liest
+  `/proc/mounts`, um seine Überwachungsstrategie zu wählen.
+- **Python 3.12+** und **[uv](https://docs.astral.sh/uv/)**.
+- **Ein Google-Gemini-API-Key** (der Free Tier reicht zum Ausprobieren) aus dem
   [Google AI Studio](https://aistudio.google.com/app/apikey).
-- **(Optional) titan + `brain-watcher`** for the RAG integration — *not* required.
+- **(Optional) titan + `brain-watcher`** für die RAG-Integration — *nicht* erforderlich.
 
-PDF/DOCX/HTML parsing comes from Python dependencies (`pypdf`, `python-docx`,
-`beautifulsoup4`) that `uv` installs for you — no extra system packages.
+PDF-/DOCX-/HTML-Parsing kommt aus Python-Abhängigkeiten (`pypdf`, `python-docx`,
+`beautifulsoup4`), die `uv` für dich installiert — keine zusätzlichen Systempakete.
 
-## Quickstart (standalone)
+## Schnellstart (standalone)
 
 ```bash
-# 1. Install dependencies and the git pre-commit hooks
+# 1. Abhängigkeiten und die git-pre-commit-Hooks installieren
 make install
 
-# 2. Provide your Gemini API key (the only required setting)
+# 2. Deinen Gemini-API-Key bereitstellen (das einzige Pflicht-Setting)
 mkdir -p ~/.config/vault_watcher
-echo 'GEMINI_API_KEY=your-real-key-here' > ~/.config/vault_watcher/env
-chmod 600 ~/.config/vault_watcher/env   # the file holds a secret
+echo 'GEMINI_API_KEY=dein-echter-key-hier' > ~/.config/vault_watcher/env
+chmod 600 ~/.config/vault_watcher/env   # die Datei enthält ein Geheimnis
 
-# 3. Run it (the working folders are created on first start)
+# 3. Ausführen (die Arbeitsordner werden beim ersten Start angelegt)
 make run
 ```
 
-With only the key set, the watcher uses these default folders and creates them
-automatically:
+Mit nur gesetztem Key nutzt der Watcher diese Default-Ordner und legt sie
+automatisch an:
 
-- drop files into **`~/0_Pipeline/In`**
-- finished notes appear in **`~/0_Pipeline/Out`**
-- originals are moved to **`~/0_Pipeline/Archive`**
-- unprocessable files go to **`~/0_Pipeline/Failed`** (with a `.error.txt` reason)
+- Dateien in **`~/0_Pipeline/In`** ablegen
+- fertige Notizen erscheinen in **`~/0_Pipeline/Out`**
+- Originale werden nach **`~/0_Pipeline/Archive`** verschoben
+- unverarbeitbare Dateien gehen nach **`~/0_Pipeline/Failed`** (mit `.error.txt`-Grund)
 
-## Configuration
+## Konfiguration
 
-Set these in `~/.config/vault_watcher/env` (loaded by the app and by systemd; use
-absolute paths):
+Diese in `~/.config/vault_watcher/env` setzen (von der App und von systemd geladen;
+absolute Pfade verwenden):
 
-| Variable | Purpose | Default |
+| Variable | Zweck | Default |
 |---|---|---|
-| `GEMINI_API_KEY` | Gemini API key (required) | — |
-| `VAULT_WATCHER_RAW_DIR` | folder watched for new files | `~/0_Pipeline/In` |
-| `VAULT_WATCHER_PROCESSED_DIR` | where notes are written | `~/0_Pipeline/Out` |
-| `VAULT_WATCHER_ARCHIVE_DIR` | where originals are moved | `~/0_Pipeline/Archive` |
-| `VAULT_WATCHER_FAILED_DIR` | dead-letter dir (+ `.error.txt` sidecar) | `~/0_Pipeline/Failed` |
-| `VAULT_WATCHER_DOMAINS` | seed domains for classification (Gemini may add new ones) | `business,lernen,projekte,system` |
-| `VAULT_WATCHER_MAX_CHARS` | max characters sent to Gemini (truncated + logged beyond) | `200000` |
+| `GEMINI_API_KEY` | Gemini-API-Key (erforderlich) | — |
+| `VAULT_WATCHER_RAW_DIR` | auf neue Dateien überwachter Ordner | `~/0_Pipeline/In` |
+| `VAULT_WATCHER_PROCESSED_DIR` | wohin Notizen geschrieben werden | `~/0_Pipeline/Out` |
+| `VAULT_WATCHER_ARCHIVE_DIR` | wohin Originale verschoben werden | `~/0_Pipeline/Archive` |
+| `VAULT_WATCHER_FAILED_DIR` | Dead-Letter-Verzeichnis (+ `.error.txt`-Sidecar) | `~/0_Pipeline/Failed` |
+| `VAULT_WATCHER_DOMAINS` | Seed-Domains für die Klassifikation (Gemini darf neue ergänzen) | `business,lernen,projekte,system` |
+| `VAULT_WATCHER_MAX_CHARS` | max. an Gemini gesendete Zeichen (darüber gekürzt + geloggt) | `200000` |
 
-Notes carry a `domain:` frontmatter field required by titan (Gemini picks from the
-seed list or creates a new domain). For the titan integration, set
-`VAULT_WATCHER_PROCESSED_DIR` to a folder inside the RAG vault; keep the raw and
-archive dirs *outside* the vault. Details in
+Notizen tragen ein von titan benötigtes `domain:`-Frontmatter-Feld (Gemini wählt aus
+der Seed-Liste oder erstellt eine neue Domain). Für die titan-Integration
+`VAULT_WATCHER_PROCESSED_DIR` auf einen Ordner innerhalb des RAG-Vaults setzen; Roh-
+und Archiv-Verzeichnisse *außerhalb* des Vaults halten. Details in
 [`docs/ai/ARCHITECTURE.md`](docs/ai/ARCHITECTURE.md).
 
-## Run & develop
+## Ausführen & Entwickeln
 
 ```bash
-make run        # run the watcher locally
-make test       # run tests with coverage
-make check      # full quality gate: lint + types + tests
-make format     # auto-fix style issues
-make help       # list all available commands
+make run        # den Watcher lokal ausführen
+make test       # Tests mit Coverage ausführen
+make check      # vollständiges Quality-Gate: Lint + Typen + Tests
+make format     # Style-Probleme automatisch beheben
+make help       # alle verfügbaren Befehle auflisten
 ```
 
-Deploy as a systemd user service — see [`deploy/README.md`](deploy/README.md).
+Als systemd-User-Service deployen — siehe [`deploy/README.md`](deploy/README.md).
 
-## Project Structure
+## Projektstruktur
 
 ```
-src/obsidian_inbox_watcher/    Source code (watcher, extractors, Gemini call, note rendering)
-tests/               Pytest tests (mirrors src/ layout)
-deploy/              systemd user units (workstation + always-on hub) + guide
-docs/ai/             architecture, decisions and plans
-.github/workflows/   CI configuration
+src/obsidian_inbox_watcher/    Quellcode (Watcher, Extraktoren, Gemini-Call, Notiz-Rendering)
+tests/               Pytest-Tests (spiegelt das src/-Layout)
+deploy/              systemd-User-Units (Workstation + Always-on-Hub) + Anleitung
+docs/ai/             Architektur, Entscheidungen und Pläne
+.github/workflows/   CI-Konfiguration
 ```
 
 ## Tooling
 
-| Tool         | Purpose                              |
+| Tool         | Zweck                                |
 |--------------|--------------------------------------|
-| **uv**       | Package manager + Python installer   |
-| **ruff**     | Linter + formatter                   |
-| **mypy**     | Static type checker (strict mode)    |
-| **pytest**   | Test runner with coverage            |
-| **pre-commit** | Git hook runner                    |
+| **uv**       | Paketmanager + Python-Installer      |
+| **ruff**     | Linter + Formatter                   |
+| **mypy**     | Statischer Typprüfer (Strict Mode)   |
+| **pytest**   | Test-Runner mit Coverage             |
+| **pre-commit** | Git-Hook-Runner                    |
 
-All tools run in CI on every push.
+Alle Tools laufen bei jedem Push in der CI.
 
-## Documentation & developer workflow
+## Dokumentation & Entwickler-Workflow
 
-In-depth architecture (including a data-flow diagram and the hub topology) and
-design decisions live in [`docs/ai/`](docs/ai/). These files also drive a
-structured AI-assisted development workflow; `CLAUDE.md` (mirrored as
-`AGENTS.md`/`GEMINI.md`) is the entry point for any agent.
+Vertiefende Architektur (inkl. Datenfluss-Diagramm und Hub-Topologie) und
+Designentscheidungen liegen in [`docs/ai/`](docs/ai/). Diese Dateien dienen zugleich
+einem strukturierten KI-gestützten Entwicklungsworkflow; `CLAUDE.md` (gespiegelt als
+`AGENTS.md`/`GEMINI.md`) ist der Einstiegspunkt für jeden Agenten.
 
-🇩🇪 Eine deutsche Fassung dieser README gibt es unter [README.de.md](README.de.md).
 
-## License
+## Lizenz
 
-MIT — see [LICENSE](LICENSE).
+MIT — siehe [LICENSE](LICENSE).

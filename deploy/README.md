@@ -1,73 +1,73 @@
-# Service Deployment: Obsidian Inbox Watcher
+# Service-Deployment: Obsidian Inbox Watcher
 
-This package runs as a standard **systemd user service** on Linux (and Ubuntu under
-WSL2). It needs no root.
+Dieses Paket läuft als standardmäßiger **systemd-User-Service** unter Linux (und Ubuntu unter
+WSL2). Es braucht kein Root.
 
-> **Placeholders:** values like `<your-user>` and paths such as `/mnt/f/vault` are
-> **examples from the author's setup** — replace them with your own. `<your-user>`
-> is your Linux username (`echo $USER`). The watcher itself works standalone; the
-> Titan integration is optional (see the project README).
+> **Platzhalter:** Werte wie `<your-user>` und Pfade wie `/mnt/f/vault` sind
+> **Beispiele aus dem Setup des Autors** — ersetze sie durch deine eigenen. `<your-user>`
+> ist dein Linux-Benutzername (`echo $USER`). Der Watcher selbst funktioniert standalone; die
+> Titan-Integration ist optional (siehe die Projekt-README).
 
-## Quick Installation
+## Schnellinstallation
 
-To install and enable this service on your local system:
+Um diesen Service auf deinem lokalen System zu installieren und zu aktivieren:
 
-1. **Install uv package manager** (if not already installed):
+1. **uv-Paketmanager installieren** (falls noch nicht installiert):
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-2. **Sync dependencies and create environment**:
+2. **Abhängigkeiten synchronisieren und Environment erstellen**:
    ```bash
    make install
    ```
 
-3. **Configure the key and folders** in `~/.config/vault_watcher/env`.
-   At minimum set `GEMINI_API_KEY`; the directories default to `~/0_Pipeline/*` if
-   omitted. Use absolute paths here (systemd does not expand `~`):
+3. **Key und Ordner konfigurieren** in `~/.config/vault_watcher/env`.
+   Mindestens `GEMINI_API_KEY` setzen; die Verzeichnisse fallen auf `~/0_Pipeline/*` zurück, wenn
+   weggelassen. Hier absolute Pfade verwenden (systemd expandiert `~` nicht):
    ```ini
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
+   GEMINI_API_KEY=dein_echter_gemini_api_key_hier
    VAULT_WATCHER_RAW_DIR=/home/<your-user>/0_Pipeline/In
    VAULT_WATCHER_PROCESSED_DIR=/home/<your-user>/0_Pipeline/Out
    VAULT_WATCHER_ARCHIVE_DIR=/home/<your-user>/0_Pipeline/Archive
    VAULT_WATCHER_FAILED_DIR=/home/<your-user>/0_Pipeline/Failed
    ```
-   `chmod 600 ~/.config/vault_watcher/env` since it holds the key. **Optional Titan
-   integration:** point `VAULT_WATCHER_PROCESSED_DIR` at a folder inside your RAG
-   vault (the author uses `/mnt/f/vault/notes/inbox`) so `brain-watcher` auto-ingests
-   every generated note (see `docs/ai/ARCHITECTURE.md`).
+   `chmod 600 ~/.config/vault_watcher/env`, da sie den Key enthält. **Optionale Titan-
+   Integration:** `VAULT_WATCHER_PROCESSED_DIR` auf einen Ordner innerhalb deines RAG-
+   Vaults zeigen lassen (der Autor nutzt `/mnt/f/vault/notes/inbox`), sodass `brain-watcher`
+   jede generierte Notiz automatisch ingestet (siehe `docs/ai/ARCHITECTURE.md`).
 
-4. **Link the unit into systemd user space**:
+4. **Die Unit in den systemd-User-Space verlinken**:
    ```bash
    systemctl --user link ~/projects/obsidian-inbox-watcher/deploy/obsidian-inbox-watcher.service
    ```
 
-5. **Reload, enable and start the service**:
+5. **Den Service neu laden, aktivieren und starten**:
    ```bash
    systemctl --user daemon-reload
    systemctl --user enable --now obsidian-inbox-watcher.service
    ```
 
-## Hub deployment (optional — always-on server example)
+## Hub-Deployment (optional — Always-on-Server-Beispiel)
 
-This is the author's specific "always-on" topology: a small Mini-PC fed by Syncthing.
-You only need it if you want a similar setup; otherwise the Quick Installation above
-is enough. The hub uses a second unit, `obsidian-inbox-watcher.hub.service`, which
-runs as a dedicated user (`<hub-user>`), waits for the network, and always restarts.
-Substitute `<hub-user>` and the example mount point `/srv/cloud` with your own.
+Das ist die spezifische „Always-on"-Topologie des Autors: ein kleiner Mini-PC, von Syncthing gespeist.
+Du brauchst es nur, wenn du ein ähnliches Setup willst; andernfalls reicht die Schnellinstallation
+oben. Der Hub nutzt eine zweite Unit, `obsidian-inbox-watcher.hub.service`, die
+als dedizierter Nutzer (`<hub-user>`) läuft, auf das Netzwerk wartet und immer neu startet.
+Ersetze `<hub-user>` und den Beispiel-Mountpoint `/srv/cloud` durch deine eigenen.
 
-1. Same `make install` as above (in `~/projects/obsidian-inbox-watcher`).
+1. Gleiches `make install` wie oben (in `~/projects/obsidian-inbox-watcher`).
 
-2. **Mount a native ext4 disk** (example mount point `/srv/cloud`; ext4 keeps inotify
-   working) and create the Syncthing folder boundaries underneath it:
-   - `.../inbox/raw` — Syncthing folder, **receive-only** on the hub (raw input).
-   - `.../vault` — Syncthing folder, **bidirectional** hub ↔ workstation.
-   - `.../archive`, `.../failed` — **local only, never synced**, so raw inputs and
-     dead-lettered files never reach the RAG vault.
+2. **Eine native ext4-Platte mounten** (Beispiel-Mountpoint `/srv/cloud`; ext4 hält inotify
+   funktionsfähig) und die Syncthing-Ordner-Grenzen darunter anlegen:
+   - `.../inbox/raw` — Syncthing-Ordner, **receive-only** auf dem Hub (Roh-Input).
+   - `.../vault` — Syncthing-Ordner, **bidirektional** Hub ↔ Workstation.
+   - `.../archive`, `.../failed` — **nur lokal, nie synchronisiert**, sodass Roh-Inputs und
+     dead-letterte Dateien nie den RAG-Vault erreichen.
 
-3. **Configure** `~/.config/vault_watcher/env` for the hub user (absolute paths):
+3. **Konfiguriere** `~/.config/vault_watcher/env` für den Hub-Nutzer (absolute Pfade):
    ```ini
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
+   GEMINI_API_KEY=dein_echter_gemini_api_key_hier
    VAULT_WATCHER_RAW_DIR=/srv/cloud/inbox/raw
    VAULT_WATCHER_PROCESSED_DIR=/srv/cloud/vault/notes/inbox
    VAULT_WATCHER_ARCHIVE_DIR=/srv/cloud/archive
@@ -75,45 +75,45 @@ Substitute `<hub-user>` and the example mount point `/srv/cloud` with your own.
    VAULT_WATCHER_DOMAINS=business,lernen,projekte,system
    VAULT_WATCHER_MAX_CHARS=200000
    ```
-   `chmod 600 ~/.config/vault_watcher/env`. The note dir lives inside the Syncthing
-   `vault/` folder so notes replicate to the workstation, where `brain-watcher`
-   ingests them into Titan when that machine is on.
+   `chmod 600 ~/.config/vault_watcher/env`. Das Notiz-Verzeichnis liegt innerhalb des Syncthing-
+   `vault/`-Ordners, sodass Notizen zur Workstation repliziert werden, wo `brain-watcher`
+   sie in Titan ingestet, wenn diese Maschine an ist.
 
-   > The unit file ships with example paths (`/home/<hub-user>/...`). Edit
-   > `WorkingDirectory`, `EnvironmentFile` and `ExecStart` in
-   > `deploy/obsidian-inbox-watcher.hub.service` to match your user before linking it.
+   > Die Unit-Datei wird mit Beispiel-Pfaden ausgeliefert (`/home/<hub-user>/...`). Editiere
+   > `WorkingDirectory`, `EnvironmentFile` und `ExecStart` in
+   > `deploy/obsidian-inbox-watcher.hub.service` auf deinen Nutzer, bevor du sie verlinkst.
 
-4. **Link, reload, enable and start** (with the hub unit):
+4. **Verlinken, neu laden, aktivieren und starten** (mit der Hub-Unit):
    ```bash
    systemctl --user link ~/projects/obsidian-inbox-watcher/deploy/obsidian-inbox-watcher.hub.service
    systemctl --user daemon-reload
    systemctl --user enable --now obsidian-inbox-watcher.hub.service
    ```
-   Run `loginctl enable-linger <hub-user>` so the user service keeps running while
-   no one is logged in.
+   `loginctl enable-linger <hub-user>` ausführen, damit der User-Service weiterläuft, während
+   niemand eingeloggt ist.
 
-> Out of scope here (hub provisioning, tracked separately): installing `uv`/SSD
-> tooling, formatting/mounting the disk, the backup job, and the Telegram capture
-> service (a sibling repo). See `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
+> Hier out of scope (Hub-Provisioning, separat getrackt): Installation von `uv`/SSD-
+> Tooling, Formatieren/Mounten der Platte, der Backup-Job und der Telegram-Capture-
+> Service (ein Schwester-Repo). Siehe `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
 
-## Control Commands
+## Steuerbefehle
 
-- **Check Service Status**:
+- **Service-Status prüfen**:
   ```bash
   systemctl --user status obsidian-inbox-watcher.service
   ```
 
-- **Stop Service**:
+- **Service stoppen**:
   ```bash
   systemctl --user stop obsidian-inbox-watcher.service
   ```
 
-- **Restart Service**:
+- **Service neu starten**:
   ```bash
   systemctl --user restart obsidian-inbox-watcher.service
   ```
 
-- **Inspect Logs in Real-time**:
+- **Logs in Echtzeit inspizieren**:
   ```bash
   journalctl --user -u obsidian-inbox-watcher.service -f -n 100
   ```
