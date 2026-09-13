@@ -31,9 +31,17 @@ repos:
     hooks:
       - id: mypy
         files: ^(src|tests)/
+        # The hook runs mypy in its own environment, so it has to be told what
+        # the project depends on. Without tenacity every @retry-decorated
+        # function reads as untyped, and without google-genai the SDK's return
+        # types collapse to Any — errors `make check` never sees, because there
+        # mypy runs in the venv.
         additional_dependencies:
           - pydantic>=2.0
           - types-pyyaml>=6.0
+          - tenacity>=9.1.4
+          - types-requests>=2.31
+          - google-genai>=2.5.0
 
   # gitleaks: no secret reaches a commit. The repos here are meant to go public,
   # and a secret in history is not removed by deleting it from the tip.
