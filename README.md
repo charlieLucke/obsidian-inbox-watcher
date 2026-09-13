@@ -37,10 +37,12 @@ flowchart LR
     OIW["obsidian-inbox-watcher<br/>Dokumente → Notizen"]
     T["titan<br/>RAG-Engine (Index + Suche)"]
     BM["brain-mcp<br/>MCP-Server für Claude"]
+    HB["homebase<br/>Web-Control-Panel"]
     C(("Claude"))
     OIW -->|".md-Notizen"| T
-    BM -->|"HTTP: /search, /ingest"| T
+    BM -->|"HTTP: /search, /ingest/file"| T
     C <-->|"MCP-Tools"| BM
+    HB -.->|"Status · Start/Stopp · Logs"| T
     classDef here fill:#2b6cb0,stroke:#1a365d,color:#fff,stroke-width:2px;
     class OIW here
 ```
@@ -50,6 +52,8 @@ flowchart LR
   beantwortet Suchanfragen (hybride Vektorsuche).
 - **[brain-mcp](https://github.com/charlieLucke/brain-mcp)** — bindet titan über
   MCP an Claude an.
+- **[homebase](https://github.com/charlieLucke/homebase)** — das Web-Control-Panel:
+  Status, Logs und Start/Stopp der Dienste. Steht daneben, nicht im Datenpfad.
 
 ## Technische Highlights
 
