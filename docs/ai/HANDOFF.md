@@ -10,7 +10,7 @@ Model: Claude Opus 4.8 (operator session: hub deployment)
 ## Done in this session
 The watcher code was already complete (WI-1/1b/2/3/5/7 committed; WI-4 + WI-6
 deferred to IDEAS). This session was operator-side — deployed the watcher onto the
-always-on hub `charlie-mini-pc` and verified it end-to-end.
+always-on hub `<hub-host>` and verified it end-to-end.
 - **Mini-PC Docker migration:** moved Docker off the eMMC onto the USB HDD
   `/srv/cloud` (data-root `/srv/cloud/docker` + all DB bind mounts under
   `/srv/cloud/appdata/*`), `daemon.json` data-root + `RequiresMountsFor=/srv/cloud`,

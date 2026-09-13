@@ -79,6 +79,6 @@ def load_api_key() -> str | None:
                         val = line.split("GEMINI_API_KEY=", 1)[1].strip()
                         if val and val != "YOUR_GEMINI_API_KEY_HERE":
                             return val
-        except Exception as e:
+        except OSError as e:
             logger.error("Failed to read env file: %s", e)
     return None

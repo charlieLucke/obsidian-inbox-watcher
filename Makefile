@@ -21,6 +21,13 @@ lint:  ## Run linter + format check (no auto-fix; mirrors CI)
 	uv run ruff check .
 	uv run ruff format --check .
 
+audit:  ## AI-code audit gate: dependencies (deptry) + duplication (jscpd)
+	uvx deptry@0.23.0 .
+	npx --yes jscpd@4.0.5 src --config .jscpd.json
+
+secrets:  ## Secret scan over the full history (gitleaks)
+	gitleaks git . -c .gitleaks.toml --redact
+
 format:  ## Auto-format and auto-fix lint issues
 	uv run ruff format .
 	uv run ruff check --fix .
@@ -31,7 +38,7 @@ format-check:  ## Check formatting without changes (mirrors CI)
 typecheck:  ## Run mypy strict type checker
 	uv run mypy src tests
 
-check: format-check lint typecheck test  ## Run full quality gate (format + lint + types + tests)
+check: format-check lint typecheck audit test  ## Run full quality gate (format + lint + types + dependency/duplication audit + tests)
 
 pre-commit:  ## Run all pre-commit hooks on all files
 	uv run pre-commit run --all-files

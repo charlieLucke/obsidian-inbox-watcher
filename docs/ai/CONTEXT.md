@@ -92,4 +92,4 @@ The systemd unit loads these from `EnvironmentFile=~/.config/vault_watcher/env`;
 - **Failed (dead-letter):** `VAULT_WATCHER_FAILED_DIR` (default `~/0_Pipeline/Failed`) — unprocessable inputs + `.error.txt` sidecars, moved out of the inbox so they aren't retried forever.
 - **Hub:** the always-on Mini-PC the watcher is migrating to; raw inbox fed by Syncthing, output vault mirrored back to the workstation. See `docs/ai/plans/2026-05-29-hub-migration-and-resilience.md`.
 - **Titan / brain-watcher:** the RAG service and the daemon that watches `/mnt/f/vault` and ingests `.md` notes into it.
-- **Personal Corporate Memory:** the user's Obsidian vault capturing study, trading, capital-services and infrastructure context.
+- **Personal Corporate Memory:** the user's Obsidian vault. The domains are configuration, not a fixed list — `VAULT_WATCHER_DOMAINS` seeds them (the author's run uses business, study, projects, system) and Gemini may add one when nothing fits.
