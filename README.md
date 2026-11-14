@@ -164,8 +164,8 @@ Alle Tools laufen bei jedem Push in der CI.
 
 Vertiefende Architektur (inkl. Datenfluss-Diagramm und Hub-Topologie) und
 Designentscheidungen liegen in [`docs/ai/`](docs/ai/). Diese Dateien dienen zugleich
-einem strukturierten KI-gestützten Entwicklungsworkflow; `CLAUDE.md` (gespiegelt als
-`AGENTS.md`/`GEMINI.md`) ist der Einstiegspunkt für jeden Agenten.
+einem strukturierten KI-gestützten Entwicklungsworkflow; `AGENTS.md` (von `CLAUDE.md` und
+`GEMINI.md` importiert) ist der Einstiegspunkt für jeden Agenten.
 
 
 ## Lizenz
